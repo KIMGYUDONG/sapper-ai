@@ -1,23 +1,6 @@
 import { createHash } from 'node:crypto'
 
-import type { Policy, ToolCall, ToolResult } from '@sapper-ai/types'
-
-interface MatchList {
-  toolNames?: string[]
-  urlPatterns?: string[]
-  contentPatterns?: string[]
-  packageNames?: string[]
-  sha256?: string[]
-}
-
-interface ToolMetadata {
-  name?: string
-  version?: string
-  packageName?: string
-  ecosystem?: string
-  sourceUrl?: string
-  sha256?: string
-}
+import type { MatchList, Policy, ToolCall, ToolMetadata, ToolResult } from '@sapper-ai/types'
 
 export interface MatchSubject {
   toolName?: string
@@ -130,7 +113,7 @@ function checkList(list: MatchList | undefined, subject: MatchSubject): string[]
 }
 
 export function evaluatePolicyMatch(policy: Policy, subject: MatchSubject): PolicyMatchResult {
-  const allowReasons = checkList((policy as Policy & { allowlist?: MatchList }).allowlist, subject)
+  const allowReasons = checkList(policy.allowlist, subject)
   if (allowReasons.length > 0) {
     return {
       action: 'allow',
@@ -138,7 +121,7 @@ export function evaluatePolicyMatch(policy: Policy, subject: MatchSubject): Poli
     }
   }
 
-  const blockReasons = checkList((policy as Policy & { blocklist?: MatchList }).blocklist, subject)
+  const blockReasons = checkList(policy.blocklist, subject)
   if (blockReasons.length > 0) {
     return {
       action: 'block',

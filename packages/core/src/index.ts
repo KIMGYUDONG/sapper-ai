@@ -10,6 +10,8 @@ export { ThreatIntelDetector } from './detectors/ThreatIntelDetector'
 export { DecisionEngine } from './engine/DecisionEngine'
 export { PolicyManager, validatePolicy } from './engine/PolicyManager'
 export { evaluatePolicyMatch, sha256 } from './engine/PolicyMatcher'
+export { createDetectors } from './engine/DetectorFactory'
+export { applyThreatIntelBlocklist } from './engine/ThreatIntelPolicy'
 
 export { Scanner } from './guards/Scanner'
 export { Guard } from './guards/Guard'

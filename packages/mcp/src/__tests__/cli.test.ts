@@ -99,4 +99,10 @@ describe('parseCliArgs', () => {
       reproPath: '/tmp/repro.json',
     })
   })
+
+  it('rejects option flags used as missing values', () => {
+    expect(() => parseCliArgs(['blocklist', 'sync', '--source', '--cache-path', '/tmp/cache.json'])).toThrow(
+      'Missing value for --source'
+    )
+  })
 })

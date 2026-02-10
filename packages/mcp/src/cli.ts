@@ -130,10 +130,7 @@ function parseProxyArgs(argv: string[], env: NodeJS.ProcessEnv): ProxyCliArgs {
     const arg = preSeparatorArgs[index]
 
     if (arg === '--policy') {
-      const nextArg = preSeparatorArgs[index + 1]
-      if (!nextArg) {
-        throw new Error('Missing value for --policy')
-      }
+      const nextArg = requireOptionValue(preSeparatorArgs, index, '--policy')
 
       policyPath = nextArg
       index += 1
@@ -170,10 +167,7 @@ function parseWatchArgs(argv: string[], env: NodeJS.ProcessEnv): WatchCliArgs {
     const arg = argv[index]
 
     if (arg === '--policy') {
-      const nextArg = argv[index + 1]
-      if (!nextArg) {
-        throw new Error('Missing value for --policy')
-      }
+      const nextArg = requireOptionValue(argv, index, '--policy')
 
       policyPath = nextArg
       index += 1
@@ -181,10 +175,7 @@ function parseWatchArgs(argv: string[], env: NodeJS.ProcessEnv): WatchCliArgs {
     }
 
     if (arg === '--path') {
-      const nextArg = argv[index + 1]
-      if (!nextArg) {
-        throw new Error('Missing value for --path')
-      }
+      const nextArg = requireOptionValue(argv, index, '--path')
 
       watchPaths.push(nextArg)
       index += 1
@@ -215,10 +206,7 @@ function parseQuarantineArgs(argv: string[], env: NodeJS.ProcessEnv): Quarantine
     for (let index = 0; index < rest.length; index += 1) {
       const arg = rest[index]
       if (arg === '--quarantine-dir') {
-        const nextArg = rest[index + 1]
-        if (!nextArg) {
-          throw new Error('Missing value for --quarantine-dir')
-        }
+        const nextArg = requireOptionValue(rest, index, '--quarantine-dir')
 
         quarantineDir = nextArg
         index += 1
@@ -240,10 +228,7 @@ function parseQuarantineArgs(argv: string[], env: NodeJS.ProcessEnv): Quarantine
     for (let index = 0; index < rest.length; index += 1) {
       const arg = rest[index]
       if (arg === '--quarantine-dir') {
-        const nextArg = rest[index + 1]
-        if (!nextArg) {
-          throw new Error('Missing value for --quarantine-dir')
-        }
+        const nextArg = requireOptionValue(rest, index, '--quarantine-dir')
 
         quarantineDir = nextArg
         index += 1
@@ -251,10 +236,7 @@ function parseQuarantineArgs(argv: string[], env: NodeJS.ProcessEnv): Quarantine
       }
 
       if (arg === '--id') {
-        const nextArg = rest[index + 1]
-        if (!nextArg) {
-          throw new Error('Missing value for --id')
-        }
+        const nextArg = requireOptionValue(rest, index, '--id')
 
         id = nextArg
         index += 1
@@ -302,10 +284,7 @@ function parseBlocklistArgs(
     for (let index = 0; index < rest.length; index += 1) {
       const arg = rest[index]
       if (arg === '--policy') {
-        const nextArg = rest[index + 1]
-        if (!nextArg) {
-          throw new Error('Missing value for --policy')
-        }
+        const nextArg = requireOptionValue(rest, index, '--policy')
 
         policyPath = nextArg
         index += 1
@@ -313,10 +292,7 @@ function parseBlocklistArgs(
       }
 
       if (arg === '--source') {
-        const nextArg = rest[index + 1]
-        if (!nextArg) {
-          throw new Error('Missing value for --source')
-        }
+        const nextArg = requireOptionValue(rest, index, '--source')
 
         sources.push(nextArg)
         index += 1
@@ -324,10 +300,7 @@ function parseBlocklistArgs(
       }
 
       if (arg === '--cache-path') {
-        const nextArg = rest[index + 1]
-        if (!nextArg) {
-          throw new Error('Missing value for --cache-path')
-        }
+        const nextArg = requireOptionValue(rest, index, '--cache-path')
 
         cachePath = nextArg
         index += 1
@@ -349,10 +322,7 @@ function parseBlocklistArgs(
     for (let index = 0; index < rest.length; index += 1) {
       const arg = rest[index]
       if (arg === '--cache-path') {
-        const nextArg = rest[index + 1]
-        if (!nextArg) {
-          throw new Error('Missing value for --cache-path')
-        }
+        const nextArg = requireOptionValue(rest, index, '--cache-path')
 
         cachePath = nextArg
         index += 1
@@ -381,10 +351,7 @@ function parseBlocklistArgs(
     for (let index = 0; index < rest.length; index += 1) {
       const arg = rest[index]
       if (arg === '--cache-path') {
-        const nextArg = rest[index + 1]
-        if (!nextArg) {
-          throw new Error('Missing value for --cache-path')
-        }
+        const nextArg = requireOptionValue(rest, index, '--cache-path')
 
         cachePath = nextArg
         index += 1
@@ -433,42 +400,42 @@ function parseAdversaryArgs(argv: string[], env: NodeJS.ProcessEnv): AdversaryRu
       const nextArg = rest[index + 1]
 
       if (arg === '--policy') {
-        if (!nextArg) throw new Error('Missing value for --policy')
+        if (!nextArg || nextArg.startsWith('-')) throw new Error('Missing value for --policy')
         policyPath = nextArg
         index += 1
         continue
       }
 
       if (arg === '--out') {
-        if (!nextArg) throw new Error('Missing value for --out')
+        if (!nextArg || nextArg.startsWith('-')) throw new Error('Missing value for --out')
         outDir = nextArg
         index += 1
         continue
       }
 
       if (arg === '--agent') {
-        if (!nextArg) throw new Error('Missing value for --agent')
+        if (!nextArg || nextArg.startsWith('-')) throw new Error('Missing value for --agent')
         agentConfigPath = nextArg
         index += 1
         continue
       }
 
       if (arg === '--max-cases') {
-        if (!nextArg) throw new Error('Missing value for --max-cases')
+        if (!nextArg || nextArg.startsWith('-')) throw new Error('Missing value for --max-cases')
         maxCases = Number.parseInt(nextArg, 10)
         index += 1
         continue
       }
 
       if (arg === '--max-duration-ms') {
-        if (!nextArg) throw new Error('Missing value for --max-duration-ms')
+        if (!nextArg || nextArg.startsWith('-')) throw new Error('Missing value for --max-duration-ms')
         maxDurationMs = Number.parseInt(nextArg, 10)
         index += 1
         continue
       }
 
       if (arg === '--seed') {
-        if (!nextArg) throw new Error('Missing value for --seed')
+        if (!nextArg || nextArg.startsWith('-')) throw new Error('Missing value for --seed')
         seed = nextArg
         index += 1
         continue
@@ -501,14 +468,14 @@ function parseAdversaryArgs(argv: string[], env: NodeJS.ProcessEnv): AdversaryRu
       const nextArg = rest[index + 1]
 
       if (arg === '--policy') {
-        if (!nextArg) throw new Error('Missing value for --policy')
+        if (!nextArg || nextArg.startsWith('-')) throw new Error('Missing value for --policy')
         policyPath = nextArg
         index += 1
         continue
       }
 
       if (arg === '--repro') {
-        if (!nextArg) throw new Error('Missing value for --repro')
+        if (!nextArg || nextArg.startsWith('-')) throw new Error('Missing value for --repro')
         reproPath = nextArg
         index += 1
         continue
@@ -665,6 +632,15 @@ function parseBoolean(value: string | undefined, fallback: boolean): boolean {
   }
 
   return fallback
+}
+
+function requireOptionValue(args: string[], index: number, flagName: string): string {
+  const value = args[index + 1]
+  if (!value || value.startsWith('-')) {
+    throw new Error(`Missing value for ${flagName}`)
+  }
+
+  return value
 }
 
 function isDirectExecution(argv: string[]): boolean {

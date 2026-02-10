@@ -1,8 +1,9 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
-import { AuditLogger, DecisionEngine, FindingScorer, Guard, LlmDetector, RulesDetector, ThreatIntelDetector, ThreatIntelStore } from '@sapper-ai/core'
+import { AuditLogger, createDetectors, DecisionEngine, FindingScorer, Guard, ThreatIntelStore } from '@sapper-ai/core'
 import type { AuditLogEntry, Decision, Detector, Policy, ToolCall } from '@sapper-ai/types'
+import { loadThreatIntelEntries } from './threatIntel'
 
 interface AttackCase {
   id: string
@@ -20,6 +21,7 @@ interface Finding {
   exposure10: number
   decision: Decision
   reproPath: string
+  triggerText: string
 }
 
 export interface CampaignRunOptions {
@@ -209,7 +211,8 @@ export class AdversaryCampaignRunner {
           })
 
           const findingId = `finding-${findings.length + 1}`
-          const reproPath = join(runOutDir, `${findingId}.repro.json`)
+          const reproFileName = `${findingId}.repro.json`
+          const reproPath = join(runOutDir, reproFileName)
           const reproPayload = {
             runId,
             findingId,
@@ -228,7 +231,8 @@ export class AdversaryCampaignRunner {
             severity10: score.severity10,
             exposure10: score.exposure10,
             decision,
-            reproPath,
+            reproPath: reproFileName,
+            triggerText: variant.slice(0, 200),
           })
         }
       }
@@ -265,7 +269,7 @@ export class AdversaryCampaignRunner {
       throw new Error('Invalid repro file: missing toolCall')
     }
 
-    const detectors = await this.resolveDetectors(options.policy)
+    const detectors = await this.resolveDetectors(options.policy, { skipSync: true })
     const guard = new Guard(new DecisionEngine(detectors), {
       log: () => {
         // No-op replay logger.
@@ -279,39 +283,33 @@ export class AdversaryCampaignRunner {
     }
   }
 
-  private async resolveDetectors(policy: Policy): Promise<Detector[]> {
+  private async resolveDetectors(policy: Policy, options: { skipSync?: boolean } = {}): Promise<Detector[]> {
     const extended = extendedPolicy(policy)
-    const detectorNames = extended.detectors ?? ['rules']
-    const detectors: Detector[] = []
+    const threatIntelEntries: Array<{
+      id: string
+      type: 'toolName' | 'packageName' | 'urlPattern' | 'contentPattern' | 'sha256'
+      value: string
+      reason: string
+      severity: 'low' | 'medium' | 'high' | 'critical'
+      source: string
+      addedAt: string
+      expiresAt?: string
+    }> = []
 
     const threatFeed = extended.threatFeed
     if (threatFeed?.enabled) {
       const store = new ThreatIntelStore({ cachePath: threatFeed.cachePath })
-      if (threatFeed.autoSync && Array.isArray(threatFeed.sources) && threatFeed.sources.length > 0) {
-        await store.syncFromSources(threatFeed.sources)
-      }
-
-      const snapshot = await store.loadSnapshot()
-      if (snapshot.entries.length > 0) {
-        detectors.push(new ThreatIntelDetector(snapshot.entries))
-      }
+      const entries = await loadThreatIntelEntries(policy, store, {
+        skipSync: options.skipSync,
+      })
+      threatIntelEntries.push(...entries)
     }
 
-    for (const name of detectorNames) {
-      if (name === 'rules') {
-        detectors.push(new RulesDetector())
-      }
-
-      if (name === 'llm') {
-        detectors.push(new LlmDetector(policy.llm))
-      }
-    }
-
-    if (detectors.length === 0) {
-      detectors.push(new RulesDetector())
-    }
-
-    return detectors
+    return createDetectors({
+      policy,
+      threatIntelEntries,
+      preferredDetectors: extended.detectors,
+    })
   }
 
   private async writeArtifacts(
@@ -337,7 +335,7 @@ export class AdversaryCampaignRunner {
         type: 'blocklist_candidate',
         reason: finding.label,
         indicatorType: 'contentPattern',
-        indicatorValue: finding.decision.reasons[0] ?? finding.attackId,
+        indicatorValue: finding.decision.reasons[0] ?? finding.triggerText,
         severity10: finding.severity10,
       })),
     }

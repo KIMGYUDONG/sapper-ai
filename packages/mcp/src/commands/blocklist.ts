@@ -83,7 +83,7 @@ export async function runBlocklistListCommand(options: BlocklistListOptions): Pr
 
 export async function runBlocklistCheckCommand(options: BlocklistCheckOptions): Promise<void> {
   const store = new ThreatIntelStore({ cachePath: options.cachePath })
-  const entries = (await store.listEntries()) as Array<{ id: string; value: string }>
+  const entries = await store.listEntries()
   const indicator = options.indicator.toLowerCase()
 
   const matches = entries.filter((entry) => entry.value.toLowerCase().includes(indicator) || entry.id.toLowerCase().includes(indicator))

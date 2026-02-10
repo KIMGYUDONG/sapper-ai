@@ -3,12 +3,12 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 
 import {
+  applyThreatIntelBlocklist,
   AuditLogger,
+  createDetectors,
   RulesDetector,
   Scanner,
-  ThreatIntelDetector,
   ThreatIntelStore,
-  buildMatchListFromIntel,
   evaluatePolicyMatch,
   QuarantineManager,
   buildEntryName,
@@ -19,6 +19,7 @@ import {
 } from '@sapper-ai/core'
 import type { AssessmentContext, AuditLogEntry, Decision, Detector, Policy } from '@sapper-ai/types'
 import chokidar, { type FSWatcher } from 'chokidar'
+import { loadThreatIntelEntries } from './threatIntel'
 
 type AuditLoggerLike = Pick<AuditLogger, 'log'>
 
@@ -153,7 +154,8 @@ export class FileWatcher {
 
       const targets = this.toTargets(filePath, content)
       for (const target of targets) {
-        const policyMatch = evaluatePolicyMatch(this.withThreatIntel(this.policy), {
+        const effectivePolicy = applyThreatIntelBlocklist(this.policy, this.threatIntelEntries)
+        const policyMatch = evaluatePolicyMatch(effectivePolicy, {
           toolName: target.id,
           content: target.surface,
         })
@@ -192,7 +194,7 @@ export class FileWatcher {
           continue
         }
 
-        const decision = await this.scanner.scanTool(target.id, target.surface, this.withThreatIntel(this.policy), this.resolveDetectors())
+        const decision = await this.scanner.scanTool(target.id, target.surface, effectivePolicy, this.resolveDetectors())
         this.logAuditEntry(target, decision)
 
         if (decision.action === 'block' && this.policy.mode === 'enforce') {
@@ -286,40 +288,15 @@ export class FileWatcher {
   }
 
   private resolveDetectors(): Detector[] {
-    if (this.threatIntelEntries.length === 0) {
+    if (this.detectors.length !== 1 || this.detectors[0]?.id !== 'rules') {
       return this.detectors
     }
 
-    return [new ThreatIntelDetector(this.threatIntelEntries), ...this.detectors]
-  }
-
-  private withThreatIntel(policy: Policy): Policy {
-    if (this.threatIntelEntries.length === 0) {
-      return policy
-    }
-
-    const intelBlocklist = buildMatchListFromIntel(this.threatIntelEntries)
-    const extended = policy as Policy & {
-      blocklist?: {
-        toolNames?: string[]
-        urlPatterns?: string[]
-        contentPatterns?: string[]
-        packageNames?: string[]
-        sha256?: string[]
-      }
-    }
-
-    return {
-      ...extended,
-      blocklist: {
-        ...(extended.blocklist ?? {}),
-        toolNames: [...(extended.blocklist?.toolNames ?? []), ...(intelBlocklist.toolNames ?? [])],
-        packageNames: [...(extended.blocklist?.packageNames ?? []), ...(intelBlocklist.packageNames ?? [])],
-        urlPatterns: [...(extended.blocklist?.urlPatterns ?? []), ...(intelBlocklist.urlPatterns ?? [])],
-        contentPatterns: [...(extended.blocklist?.contentPatterns ?? []), ...(intelBlocklist.contentPatterns ?? [])],
-        sha256: [...(extended.blocklist?.sha256 ?? []), ...(intelBlocklist.sha256 ?? [])],
-      },
-    } as Policy
+    return createDetectors({
+      policy: this.policy,
+      threatIntelEntries: this.threatIntelEntries,
+      preferredDetectors: (this.policy as Policy & { detectors?: string[] }).detectors,
+    })
   }
 
   private async loadThreatIntel(): Promise<void> {
@@ -339,15 +316,8 @@ export class FileWatcher {
       return
     }
 
-    const store = feed.cachePath ? new ThreatIntelStore({ cachePath: feed.cachePath }) : this.threatIntelStore
-
     try {
-      if (feed.autoSync && Array.isArray(feed.sources) && feed.sources.length > 0) {
-        await store.syncFromSources(feed.sources)
-      }
-
-      const snapshot = await store.loadSnapshot()
-      this.threatIntelEntries = snapshot.entries
+      this.threatIntelEntries = await loadThreatIntelEntries(this.policy, this.threatIntelStore)
     } catch (error) {
       if (feed.failOpen === false) {
         throw error

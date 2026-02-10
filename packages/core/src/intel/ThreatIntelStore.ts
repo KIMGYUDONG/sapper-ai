@@ -39,6 +39,7 @@ export interface IntelMatchList {
 interface ThreatIntelStoreOptions {
   cachePath?: string
   fetchImpl?: typeof fetch
+  fetchTimeoutMs?: number
 }
 
 function defaultCachePath(): string {
@@ -108,10 +109,12 @@ function isExpired(entry: ThreatIntelEntry, now: Date): boolean {
 export class ThreatIntelStore {
   private readonly cachePath: string
   private readonly fetchImpl: typeof fetch
+  private readonly fetchTimeoutMs: number
 
   constructor(options: ThreatIntelStoreOptions = {}) {
     this.cachePath = options.cachePath ?? defaultCachePath()
     this.fetchImpl = options.fetchImpl ?? fetch
+    this.fetchTimeoutMs = options.fetchTimeoutMs ?? 10_000
   }
 
   async loadSnapshot(): Promise<ThreatIntelSnapshot> {
@@ -139,6 +142,7 @@ export class ThreatIntelStore {
   }
 
   async syncFromSources(sources: string[]): Promise<ThreatIntelSyncResult> {
+    const existing = await this.loadSnapshot()
     const accepted: ThreatIntelEntry[] = []
     let skippedEntries = 0
 
@@ -154,7 +158,7 @@ export class ThreatIntelStore {
       }
     }
 
-    const deduped = this.dedupe(accepted)
+    const deduped = this.dedupe([...existing.entries, ...accepted])
     const snapshot: ThreatIntelSnapshot = {
       version: 1,
       updatedAt: new Date().toISOString(),
@@ -177,7 +181,20 @@ export class ThreatIntelStore {
   }
 
   private async pullSource(source: string): Promise<unknown[]> {
-    const response = await this.fetchImpl(source)
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => {
+      controller.abort()
+    }, this.fetchTimeoutMs)
+
+    let response: Response
+    try {
+      response = await this.fetchImpl(source, {
+        signal: controller.signal,
+      })
+    } finally {
+      clearTimeout(timeoutId)
+    }
+
     if (!response.ok) {
       throw new Error(`Threat intel fetch failed for ${source}: ${response.status}`)
     }

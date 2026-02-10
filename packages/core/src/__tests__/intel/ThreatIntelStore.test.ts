@@ -80,4 +80,68 @@ describe('ThreatIntelStore', () => {
     expect(matchList.toolNames).toContain('evil_tool')
     expect(matchList.urlPatterns).toContain('evil\\.example')
   })
+
+  it('preserves existing cached entries when syncing new feed entries', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'intel-merge-'))
+    tempDirs.push(root)
+
+    const store = new ThreatIntelStore({
+      cachePath: join(root, 'intel.json'),
+    })
+
+    await store.saveSnapshot({
+      version: 1,
+      updatedAt: new Date().toISOString(),
+      entries: [
+        {
+          id: 'cached-entry',
+          type: 'toolName',
+          value: 'persist_me',
+          reason: 'cached',
+          severity: 'high',
+          source: 'seed',
+          addedAt: new Date().toISOString(),
+        },
+      ],
+    })
+
+    const server = createServer((req, res) => {
+      if (req.url === '/feed') {
+        res.setHeader('content-type', 'application/json')
+        res.end(
+          JSON.stringify({
+            entries: [
+              {
+                id: 'new-entry',
+                type: 'packageName',
+                value: 'new_package',
+                reason: 'new',
+                severity: 'critical',
+              },
+            ],
+          })
+        )
+        return
+      }
+
+      res.statusCode = 404
+      res.end('not found')
+    })
+
+    await new Promise<void>((resolve) => {
+      server.listen(0, () => resolve())
+    })
+    servers.push(server)
+
+    const address = server.address()
+    if (!address || typeof address === 'string') {
+      throw new Error('Server did not provide numeric port')
+    }
+
+    await store.syncFromSources([`http://127.0.0.1:${address.port}/feed`])
+    const snapshot = await store.loadSnapshot()
+
+    expect(snapshot.entries.some((entry) => entry.id === 'cached-entry')).toBe(true)
+    expect(snapshot.entries.some((entry) => entry.id === 'new-entry')).toBe(true)
+  })
 })

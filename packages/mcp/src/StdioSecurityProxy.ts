@@ -3,15 +3,13 @@ import { ReadBuffer, serializeMessage } from '@modelcontextprotocol/sdk/shared/s
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import {
   AuditLogger,
-  buildMatchListFromIntel,
+  applyThreatIntelBlocklist,
+  createDetectors,
   DecisionEngine,
   evaluatePolicyMatch,
   Guard,
-  LlmDetector,
   PolicyManager,
-  RulesDetector,
   Scanner,
-  ThreatIntelDetector,
   ThreatIntelStore,
 } from '@sapper-ai/core'
 import type {
@@ -23,6 +21,7 @@ import type {
   ToolCall,
   ToolResult,
 } from '@sapper-ai/types'
+import { loadThreatIntelEntries } from './services/threatIntel'
 
 type JsonRpcId = string | number | null
 
@@ -450,28 +449,11 @@ export class StdioSecurityProxy {
       return this.detectors
     }
 
-    const detectorNames = (policy as ExtendedPolicy).detectors ?? ['rules']
-    const detectors: Detector[] = []
-
-    if (this.threatIntelEntries.length > 0) {
-      detectors.push(new ThreatIntelDetector(this.threatIntelEntries))
-    }
-
-    for (const detectorName of detectorNames) {
-      if (detectorName === 'rules') {
-        detectors.push(new RulesDetector())
-      }
-
-      if (detectorName === 'llm') {
-        detectors.push(new LlmDetector(policy.llm))
-      }
-    }
-
-    if (detectors.length === 0) {
-      detectors.push(new RulesDetector())
-    }
-
-    return detectors
+    return createDetectors({
+      policy,
+      threatIntelEntries: this.threatIntelEntries,
+      preferredDetectors: (policy as ExtendedPolicy).detectors,
+    })
   }
 
   private resolvePolicy(toolName: string): Policy {
@@ -528,11 +510,17 @@ export class StdioSecurityProxy {
     sourceUrl?: string
     sha256?: string
     version?: string
-    ecosystem?: string
+    ecosystem?: 'npm' | 'pypi' | 'mcp' | 'unknown'
   } | undefined {
     if (!this.isRecord(meta)) {
       return undefined
     }
+
+    const rawEcosystem = typeof meta.ecosystem === 'string' ? meta.ecosystem : undefined
+    const ecosystem =
+      rawEcosystem === 'npm' || rawEcosystem === 'pypi' || rawEcosystem === 'mcp' || rawEcosystem === 'unknown'
+        ? rawEcosystem
+        : undefined
 
     return {
       name: typeof meta.name === 'string' ? meta.name : undefined,
@@ -540,7 +528,7 @@ export class StdioSecurityProxy {
       sourceUrl: typeof meta.sourceUrl === 'string' ? meta.sourceUrl : typeof meta.url === 'string' ? meta.url : undefined,
       sha256: typeof meta.sha256 === 'string' ? meta.sha256 : undefined,
       version: typeof meta.version === 'string' ? meta.version : undefined,
-      ecosystem: typeof meta.ecosystem === 'string' ? meta.ecosystem : undefined,
+      ecosystem,
     }
   }
 
@@ -555,36 +543,15 @@ export class StdioSecurityProxy {
         sourceUrl?: string
         sha256?: string
         version?: string
-        ecosystem?: string
+        ecosystem?: 'npm' | 'pypi' | 'mcp' | 'unknown'
       }
       toolCall?: ToolCall
       toolResult?: ToolResult
       fileHash?: string
     }
   ): { action: 'allow' | 'block' | 'none'; reasons: string[] } {
-    const policyWithIntel = this.withThreatIntel(policy)
+    const policyWithIntel = applyThreatIntelBlocklist(policy, this.threatIntelEntries)
     return evaluatePolicyMatch(policyWithIntel, subject)
-  }
-
-  private withThreatIntel(policy: Policy): Policy {
-    if (this.threatIntelEntries.length === 0) {
-      return policy
-    }
-
-    const extended = policy as ExtendedPolicy
-    const intelBlocklist = buildMatchListFromIntel(this.threatIntelEntries)
-
-    return {
-      ...extended,
-      blocklist: {
-        ...(extended.blocklist ?? {}),
-        toolNames: [...(extended.blocklist?.toolNames ?? []), ...(intelBlocklist.toolNames ?? [])],
-        packageNames: [...(extended.blocklist?.packageNames ?? []), ...(intelBlocklist.packageNames ?? [])],
-        urlPatterns: [...(extended.blocklist?.urlPatterns ?? []), ...(intelBlocklist.urlPatterns ?? [])],
-        contentPatterns: [...(extended.blocklist?.contentPatterns ?? []), ...(intelBlocklist.contentPatterns ?? [])],
-        sha256: [...(extended.blocklist?.sha256 ?? []), ...(intelBlocklist.sha256 ?? [])],
-      },
-    } as Policy
   }
 
   private async loadThreatIntel(): Promise<void> {
@@ -596,14 +563,7 @@ export class StdioSecurityProxy {
     }
 
     try {
-      const store = feed.cachePath ? new ThreatIntelStore({ cachePath: feed.cachePath }) : this.threatIntelStore
-
-      if (feed.autoSync && Array.isArray(feed.sources) && feed.sources.length > 0) {
-        await store.syncFromSources(feed.sources)
-      }
-
-      const snapshot = await store.loadSnapshot()
-      this.threatIntelEntries = snapshot.entries
+      this.threatIntelEntries = await loadThreatIntelEntries(this.policy, this.threatIntelStore)
     } catch (error) {
       const failOpen = feed.failOpen ?? true
       if (!failOpen) {
