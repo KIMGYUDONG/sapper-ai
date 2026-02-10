@@ -1,8 +1,15 @@
 {
   "name": "@sapper-ai/mcp",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Model Context Protocol (MCP) security proxy for SapperAI",
-  "keywords": ["security", "ai", "mcp", "proxy", "stdio", "guardrails"],
+  "keywords": [
+    "security",
+    "ai",
+    "mcp",
+    "proxy",
+    "stdio",
+    "guardrails"
+  ],
   "license": "MIT",
   "author": "SapperAI",
   "homepage": "https://github.com/sapper-ai/sapperai#readme",
@@ -22,7 +29,9 @@
       "default": "./dist/index.js"
     }
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "publishConfig": {
     "access": "public"
   },
