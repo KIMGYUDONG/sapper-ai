@@ -158,10 +158,10 @@ Week 9-12: 콘퍼런스 발표 (온라인 meetup, AI 보안 관련)
 현재 MVP의 모든 기능은 무료로 유지한다:
 
 ```
-@sapperai/types    — 타입 정의 (MIT, 무료)
-@sapperai/core     — RulesDetector, DecisionEngine, Guard, Scanner (MIT, 무료)
-@sapperai/mcp      — MCP Security Proxy + CLI (MIT, 무료)
-@sapperai/openai   — OpenAI Agents SDK Guardrails (MIT, 무료)
+@sapper-ai/types    — 타입 정의 (MIT, 무료)
+@sapper-ai/core     — RulesDetector, DecisionEngine, Guard, Scanner (MIT, 무료)
+@sapper-ai/mcp      — MCP Security Proxy + CLI (MIT, 무료)
+@sapper-ai/openai   — OpenAI Agents SDK Guardrails (MIT, 무료)
 ```
 
 **무료 코어의 가치**:
@@ -346,11 +346,11 @@ Week 9-12: 콘퍼런스 발표 (온라인 meetup, AI 보안 관련)
 - [x] npm publish 준비 완료
 - [ ] GitHub repo public + git init
 - [ ] CI/CD (GitHub Actions)
-- [ ] npm publish (@sapperai/types, core, mcp, openai)
+- [ ] npm publish (@sapper-ai/types, core, mcp, openai)
 
 ### v0.2.0 — Community Growth (Month 1-6)
 - [ ] LlmDetector 구현 (OpenAI, Anthropic)
-- [ ] LangChain 플러그인 (@sapperai/langchain)
+- [ ] LangChain 플러그인 (@sapper-ai/langchain)
 - [ ] VSCode Extension (실시간 보안 경고)
 - [ ] 추가 프레임워크 지원 (Vercel AI SDK, CrewAI)
 

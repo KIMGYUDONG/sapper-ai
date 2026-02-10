@@ -1,11 +1,11 @@
-# @sapperai/mcp
+# @sapper-ai/mcp
 
 Model Context Protocol (MCP) security proxy for SapperAI. Wraps any MCP server with real-time threat detection.
 
 ## Installation
 
 ```bash
-pnpm add @sapperai/mcp
+pnpm add @sapper-ai/mcp
 ```
 
 ## Quick Start
@@ -23,9 +23,9 @@ sapperai-proxy --target "npx mcp-server" --policy ./policy.yaml
 ### Programmatic Usage
 
 ```typescript
-import { StdioSecurityProxy } from '@sapperai/mcp'
-import { RulesDetector, DecisionEngine } from '@sapperai/core'
-import type { Policy } from '@sapperai/types'
+import { StdioSecurityProxy } from '@sapper-ai/mcp'
+import { RulesDetector, DecisionEngine } from '@sapper-ai/core'
+import type { Policy } from '@sapper-ai/types'
 
 const policy: Policy = {
   mode: 'enforce',

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import type { AssessmentContext, Decision, Policy, ToolCall, ToolResult } from '@sapperai/types'
+import type { AssessmentContext, Decision, Policy, ToolCall, ToolResult } from '@sapper-ai/types'
 
 import { Guard } from '../../guards/Guard'
 

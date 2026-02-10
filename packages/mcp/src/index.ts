@@ -1,5 +1,5 @@
 // MCP integration for SapperAI
-import { coreVersion } from '@sapperai/core'
+import { coreVersion } from '@sapper-ai/core'
 
 export const mcpVersion = coreVersion
 

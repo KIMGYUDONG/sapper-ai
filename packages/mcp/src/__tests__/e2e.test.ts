@@ -4,7 +4,7 @@ import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
 import { Server } from '@modelcontextprotocol/sdk/server/index.js'
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
-import type { Policy } from '@sapperai/types'
+import type { Policy } from '@sapper-ai/types'
 
 import { StdioSecurityProxy } from '../StdioSecurityProxy'
 

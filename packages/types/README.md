@@ -1,11 +1,11 @@
-# @sapperai/types
+# @sapper-ai/types
 
 TypeScript type definitions for the SapperAI security framework.
 
 ## Installation
 
 ```bash
-pnpm add @sapperai/types
+pnpm add @sapper-ai/types
 ```
 
 ## Usage
@@ -20,7 +20,7 @@ import type {
   Decision,
   Policy,
   GuardAction,
-} from '@sapperai/types'
+} from '@sapper-ai/types'
 
 // Example: Custom detector implementation
 export class CustomDetector implements Detector {

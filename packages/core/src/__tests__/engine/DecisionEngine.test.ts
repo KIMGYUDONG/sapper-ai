@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import type { AssessmentContext, Detector, DetectorOutput, Policy } from '@sapperai/types'
+import type { AssessmentContext, Detector, DetectorOutput, Policy } from '@sapper-ai/types'
 
 import { DecisionEngine } from '../../engine/DecisionEngine'
 

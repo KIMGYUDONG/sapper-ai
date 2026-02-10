@@ -1,7 +1,7 @@
 import { bench, describe } from 'vitest'
 import { RulesDetector } from '../src/detectors/RulesDetector'
 import { DecisionEngine } from '../src/engine/DecisionEngine'
-import type { AssessmentContext, Policy } from '@sapperai/types'
+import type { AssessmentContext, Policy } from '@sapper-ai/types'
 
 describe('Rules-only Pipeline Benchmark', () => {
   const detector = new RulesDetector()

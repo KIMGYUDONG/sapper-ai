@@ -110,7 +110,7 @@ GitHub 및 npm 조직(Organization)을 생성합니다. 이름 선점이 불가�
 만약 `sapperai` 이름을 사용할 수 없는 경우:
 -   **GitHub**: `KIMGYUDONG/sapperai` (개인 계정) 사용
 -   **npm**: `@kimgyudong` (사용자 스코프) 사용
--   **Action**: 모든 `package.json`의 `name` 필드를 `@sapperai/*` -> `@kimgyudong/sapperai-*`로 일괄 변경해야 함 (Agent에게 요청).
+-   **Action**: 모든 `package.json`의 `name` 필드를 `@sapper-ai/*` -> `@kimgyudong/sapperai-*`로 일괄 변경해야 함 (Agent에게 요청).
 
 ---
 
@@ -213,13 +213,13 @@ GitHub Actions 탭에서 `Release` 워크플로우가 성공하는지 확인합�
 ```bash
 mkdir /tmp/sapper-test && cd /tmp/sapper-test
 npm init -y
-npm install @sapperai/core @sapperai/mcp
+npm install @sapper-ai/core @sapper-ai/mcp
 ```
 
 ### 6.2 실행 테스트
 간단한 스크립트로 모듈 로딩을 확인합니다.
 ```bash
-node -e "require('@sapperai/core')"
+node -e "require('@sapper-ai/core')"
 ```
 
 ---
@@ -228,7 +228,7 @@ node -e "require('@sapperai/core')"
 
 -   **Git**: 문제 발생 시 `git reset --hard <commit-hash>` 및 `git push -f` (초기 단계이므로 가능)
 -   **npm**:
-    -   배포 직후(72시간 내): `npm unpublish @sapperai/package --force` (주의: 영구적으로 해당 버전 재사용 불가)
+    -   배포 직후(72시간 내): `npm unpublish @sapper-ai/package --force` (주의: 영구적으로 해당 버전 재사용 불가)
     -   일반적 대응: `npm deprecate` 사용 후 픽스 버전 배포
 -   **GitHub**: Repo 삭제 후 재생성 (`gh repo delete`)
 

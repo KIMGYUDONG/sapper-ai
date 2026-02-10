@@ -1,4 +1,4 @@
-import type { AssessmentContext, Decision, Policy, ToolCall, ToolResult } from '@sapperai/types'
+import type { AssessmentContext, Decision, Policy, ToolCall, ToolResult } from '@sapper-ai/types'
 
 import { DecisionEngine } from '../engine/DecisionEngine'
 import { AuditLogger } from '../logger/AuditLogger'

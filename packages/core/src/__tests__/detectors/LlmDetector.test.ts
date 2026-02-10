@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import type { AssessmentContext, LlmConfig, Policy } from '@sapperai/types'
+import type { AssessmentContext, LlmConfig, Policy } from '@sapper-ai/types'
 
 import { LlmDetector } from '../../detectors/LlmDetector'
 

@@ -1,5 +1,5 @@
 // Core logic for SapperAI
-import { version } from '@sapperai/types'
+import { version } from '@sapper-ai/types'
 
 export const coreVersion = version
 

@@ -122,7 +122,7 @@ const maliciousTests = loadFixtures('./test-fixtures/malicious-50.jsonl');
 ### Testing with Guard
 
 ```typescript
-import { Guard } from '@sapperai/core';
+import { Guard } from '@sapper-ai/core';
 
 const guard = new Guard(detectors, policy);
 

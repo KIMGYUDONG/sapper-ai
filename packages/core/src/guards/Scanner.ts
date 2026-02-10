@@ -1,4 +1,4 @@
-import type { AssessmentContext, Decision, Detector, Policy } from '@sapperai/types'
+import type { AssessmentContext, Decision, Detector, Policy } from '@sapper-ai/types'
 
 import { DecisionEngine } from '../engine/DecisionEngine'
 

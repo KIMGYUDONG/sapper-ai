@@ -4,7 +4,7 @@ import { join } from 'node:path'
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import type { AuditLogEntry, Policy } from '@sapperai/types'
+import type { AuditLogEntry, Policy } from '@sapper-ai/types'
 
 import { AuditLogger } from '../../logger/AuditLogger'
 

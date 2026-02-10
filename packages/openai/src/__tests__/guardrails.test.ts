@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import type { Policy, AuditLogEntry } from '@sapperai/types'
+import type { Policy, AuditLogEntry } from '@sapper-ai/types'
 
 // This import will FAIL until implementation — that's expected (TDD RED phase)
 import { createToolInputGuardrail, createToolOutputGuardrail } from '../guardrails'

@@ -4,7 +4,7 @@ import { join } from 'node:path'
 
 import { describe, expect, it } from 'vitest'
 
-import type { Policy } from '@sapperai/types'
+import type { Policy } from '@sapper-ai/types'
 
 import { PolicyManager } from '../../engine/PolicyManager'
 

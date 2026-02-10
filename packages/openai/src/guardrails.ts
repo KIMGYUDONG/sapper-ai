@@ -1,5 +1,5 @@
-import { AuditLogger, DecisionEngine, Guard, LlmDetector, RulesDetector } from '@sapperai/core'
-import type { AuditLogEntry, Detector, Policy, ToolCall, ToolResult } from '@sapperai/types'
+import { AuditLogger, DecisionEngine, Guard, LlmDetector, RulesDetector } from '@sapper-ai/core'
+import type { AuditLogEntry, Detector, Policy, ToolCall, ToolResult } from '@sapper-ai/types'
 import { defineToolInputGuardrail, defineToolOutputGuardrail } from '@openai/agents'
 
 /**

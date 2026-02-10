@@ -22,13 +22,13 @@ SapperAI provides **zero-dependency threat detection** with:
 │                        SapperAI Stack                        │
 ├──────────────────────────────────────────────────────────────┤
 │                                                              │
-│  @sapperai/types (11 types, no deps)                        │
+│  @sapper-ai/types (11 types, no deps)                        │
 │      │                                                       │
-│      └─► @sapperai/core (60+ rules, policy engine)          │
+│      └─► @sapper-ai/core (60+ rules, policy engine)          │
 │              │                                               │
-│              ├─► @sapperai/mcp (stdio proxy + CLI)          │
+│              ├─► @sapper-ai/mcp (stdio proxy + CLI)          │
 │              │                                               │
-│              └─► @sapperai/openai (Agents SDK guardrails)   │
+│              └─► @sapper-ai/openai (Agents SDK guardrails)   │
 │                                                              │
 └──────────────────────────────────────────────────────────────┘
 
@@ -40,17 +40,17 @@ Detection Pipeline:
 
 | Package | Description | Use Case |
 |---------|-------------|----------|
-| **[@sapperai/types](./packages/types)** | TypeScript type definitions | Custom detectors, integrations |
-| **[@sapperai/core](./packages/core)** | Core detection engine (RulesDetector, DecisionEngine, Guard) | Direct integration |
-| **[@sapperai/mcp](./packages/mcp)** | MCP security proxy | Wrap any MCP server |
-| **[@sapperai/openai](./packages/openai)** | OpenAI Agents SDK guardrails | Drop-in for @openai/agents |
+| **[@sapper-ai/types](./packages/types)** | TypeScript type definitions | Custom detectors, integrations |
+| **[@sapper-ai/core](./packages/core)** | Core detection engine (RulesDetector, DecisionEngine, Guard) | Direct integration |
+| **[@sapper-ai/mcp](./packages/mcp)** | MCP security proxy | Wrap any MCP server |
+| **[@sapper-ai/openai](./packages/openai)** | OpenAI Agents SDK guardrails | Drop-in for @openai/agents |
 
 ## Quick Start
 
 ### Option 1: MCP Proxy (No Code)
 
 ```bash
-pnpm add @sapperai/mcp
+pnpm add @sapper-ai/mcp
 
 # Wrap any MCP server
 sapperai-proxy --target "npx @modelcontextprotocol/server-example"
@@ -59,8 +59,8 @@ sapperai-proxy --target "npx @modelcontextprotocol/server-example"
 ### Option 2: OpenAI Agents Integration
 
 ```typescript
-import { createToolInputGuardrail } from '@sapperai/openai'
-import { RulesDetector, DecisionEngine } from '@sapperai/core'
+import { createToolInputGuardrail } from '@sapper-ai/openai'
+import { RulesDetector, DecisionEngine } from '@sapper-ai/core'
 import { Agent } from '@openai/agents'
 
 const detector = new RulesDetector()
@@ -81,7 +81,7 @@ const agent = new Agent({
 ### Option 3: Direct Integration
 
 ```typescript
-import { Guard, RulesDetector, DecisionEngine } from '@sapperai/core'
+import { Guard, RulesDetector, DecisionEngine } from '@sapper-ai/core'
 
 const detector = new RulesDetector()
 const engine = new DecisionEngine([detector])
@@ -119,15 +119,15 @@ DecisionEngine.assess - large (5KB)  30,785 ops/sec  p99: 0.0424ms
 
 ```bash
 # Full monorepo (for development)
-git clone https://github.com/sapperai/sapperai.git
+git clone https://github.com/sapper-ai/sapperai.git
 cd sapperai
 pnpm install
 pnpm build
 
 # Individual packages (for usage)
-pnpm add @sapperai/core
-pnpm add @sapperai/mcp
-pnpm add @sapperai/openai
+pnpm add @sapper-ai/core
+pnpm add @sapper-ai/mcp
+pnpm add @sapper-ai/openai
 ```
 
 ## Development
@@ -143,7 +143,7 @@ pnpm test
 pnpm exec tsc -b --noEmit
 
 # Benchmarks
-pnpm --filter @sapperai/core run bench
+pnpm --filter @sapper-ai/core run bench
 ```
 
 ## Verified Metrics (MVP)

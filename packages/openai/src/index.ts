@@ -1,4 +1,4 @@
-import { coreVersion } from '@sapperai/core'
+import { coreVersion } from '@sapper-ai/core'
 
 export const openaiVersion = coreVersion
 

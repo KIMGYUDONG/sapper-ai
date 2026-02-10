@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
-import { AuditLogger, PolicyManager } from '@sapperai/core'
-import type { Policy } from '@sapperai/types'
+import { AuditLogger, PolicyManager } from '@sapper-ai/core'
+import type { Policy } from '@sapper-ai/types'
 
 import { StdioSecurityProxy } from './StdioSecurityProxy'
 

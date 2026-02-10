@@ -1,4 +1,4 @@
-import type { AssessmentContext, Detector, DetectorOutput } from '@sapperai/types'
+import type { AssessmentContext, Detector, DetectorOutput } from '@sapper-ai/types'
 
 type PatternSeverity = 'high' | 'medium'
 

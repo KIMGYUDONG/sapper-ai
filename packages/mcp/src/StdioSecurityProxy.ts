@@ -9,7 +9,7 @@ import {
   PolicyManager,
   RulesDetector,
   Scanner,
-} from '@sapperai/core'
+} from '@sapper-ai/core'
 import type {
   AssessmentContext,
   AuditLogEntry,
@@ -18,7 +18,7 @@ import type {
   Policy,
   ToolCall,
   ToolResult,
-} from '@sapperai/types'
+} from '@sapper-ai/types'
 
 type JsonRpcId = string | number | null
 

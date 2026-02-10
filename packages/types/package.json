@@ -1,14 +1,14 @@
 {
-  "name": "@sapperai/types",
+  "name": "@sapper-ai/types",
   "version": "0.1.0",
   "description": "TypeScript type definitions for SapperAI security framework",
   "keywords": ["security", "ai", "types", "typescript", "prompt-injection", "guardrails"],
   "license": "MIT",
   "author": "SapperAI",
-  "homepage": "https://github.com/sapperai/sapperai#readme",
+  "homepage": "https://github.com/sapper-ai/sapperai#readme",
   "repository": {
     "type": "git",
-    "url": "https://github.com/sapperai/sapperai.git",
+    "url": "https://github.com/sapper-ai/sapperai.git",
     "directory": "packages/types"
   },
   "main": "dist/index.js",

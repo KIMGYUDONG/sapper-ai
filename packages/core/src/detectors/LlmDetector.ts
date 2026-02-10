@@ -1,4 +1,4 @@
-import type { AssessmentContext, Detector, DetectorOutput, LlmConfig } from '@sapperai/types'
+import type { AssessmentContext, Detector, DetectorOutput, LlmConfig } from '@sapper-ai/types'
 
 interface ParsedLlmResult {
   risk: number

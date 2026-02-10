@@ -1,18 +1,18 @@
-# @sapperai/openai
+# @sapper-ai/openai
 
 OpenAI Agents SDK integration for SapperAI - drop-in tool input/output guardrails.
 
 ## Installation
 
 ```bash
-pnpm add @sapperai/openai
+pnpm add @sapper-ai/openai
 ```
 
 ## Quick Start
 
 ```typescript
-import { createToolInputGuardrail, createToolOutputGuardrail } from '@sapperai/openai'
-import { RulesDetector, DecisionEngine } from '@sapperai/core'
+import { createToolInputGuardrail, createToolOutputGuardrail } from '@sapper-ai/openai'
+import { RulesDetector, DecisionEngine } from '@sapper-ai/core'
 import { Agent } from '@openai/agents'
 
 // 1. Set up detection pipeline

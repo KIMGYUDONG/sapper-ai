@@ -1,4 +1,4 @@
-import type { AssessmentContext, Decision, Detector, DetectorOutput, Policy } from '@sapperai/types'
+import type { AssessmentContext, Decision, Detector, DetectorOutput, Policy } from '@sapper-ai/types'
 
 interface ThresholdConfig {
   riskThreshold: number

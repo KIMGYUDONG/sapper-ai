@@ -1,6 +1,6 @@
 import { appendFileSync } from 'node:fs'
 
-import type { AuditLogEntry } from '@sapperai/types'
+import type { AuditLogEntry } from '@sapper-ai/types'
 
 interface AuditLoggerOptions {
   filePath?: string

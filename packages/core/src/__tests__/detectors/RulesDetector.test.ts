@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 
-import type { AssessmentContext, Policy } from '@sapperai/types'
+import type { AssessmentContext, Policy } from '@sapper-ai/types'
 
 import { RulesDetector } from '../../detectors/RulesDetector'
 

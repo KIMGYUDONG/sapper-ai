@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { extname } from 'node:path'
 
-import type { Policy } from '@sapperai/types'
+import type { Policy } from '@sapper-ai/types'
 import { parse as parseYaml } from 'yaml'
 import { z } from 'zod'
 

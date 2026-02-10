@@ -1,18 +1,18 @@
-# @sapperai/core
+# @sapper-ai/core
 
 Core security engine for SapperAI - rules-based threat detection and policy enforcement for AI systems.
 
 ## Installation
 
 ```bash
-pnpm add @sapperai/core
+pnpm add @sapper-ai/core
 ```
 
 ## Quick Start
 
 ```typescript
-import { RulesDetector, DecisionEngine, Guard } from '@sapperai/core'
-import type { Policy } from '@sapperai/types'
+import { RulesDetector, DecisionEngine, Guard } from '@sapper-ai/core'
+import type { Policy } from '@sapper-ai/types'
 
 // 1. Configure policy
 const policy: Policy = {

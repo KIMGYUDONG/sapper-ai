@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { Policy } from '@sapperai/types'
+import type { Policy } from '@sapper-ai/types'
 
 import { createToolInputGuardrail, createToolOutputGuardrail } from '../guardrails'
 

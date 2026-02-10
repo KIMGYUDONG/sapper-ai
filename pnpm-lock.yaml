@@ -26,7 +26,7 @@ importers:
 
   packages/core:
     dependencies:
-      '@sapperai/types':
+      '@sapper-ai/types':
         specifier: workspace:*
         version: link:../types
       yaml:
@@ -51,10 +51,10 @@ importers:
       '@modelcontextprotocol/sdk':
         specifier: ^1.26.0
         version: 1.26.0(zod@4.3.6)
-      '@sapperai/core':
+      '@sapper-ai/core':
         specifier: workspace:*
         version: link:../core
-      '@sapperai/types':
+      '@sapper-ai/types':
         specifier: workspace:*
         version: link:../types
     devDependencies:
@@ -73,10 +73,10 @@ importers:
       '@openai/agents':
         specifier: ^0.4.6
         version: 0.4.6(ws@8.19.0)(zod@4.3.6)
-      '@sapperai/core':
+      '@sapper-ai/core':
         specifier: workspace:*
         version: link:../core
-      '@sapperai/types':
+      '@sapper-ai/types':
         specifier: workspace:*
         version: link:../types
     devDependencies:
