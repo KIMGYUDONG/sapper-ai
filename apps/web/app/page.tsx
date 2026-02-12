@@ -29,7 +29,249 @@ type DetectionResponse = {
   }
 }
 
+type PipelineStep = {
+  id: string
+  title: string
+  detail: string
+  risk: number
+  confidence: number
+  status: 'clear' | 'warning' | 'critical'
+}
+
+type AgentScenarioPreset = {
+  id: 'malicious-install' | 'safe-workflow'
+  title: string
+  summary: string
+}
+
+type AgentRunStep = {
+  stepId: string
+  label: string
+  toolName: string
+  argumentsPreview: string
+  blocked: boolean
+  executed: boolean
+  timestamp: string
+  durationMs: number
+  analysis: string
+  decision: DetectionResponse
+}
+
+type AgentDemoResponse = {
+  runId: string
+  model: string
+  scenario: {
+    id: string
+    title: string
+  }
+  halted: boolean
+  executeBlocked: boolean
+  blockedCount: number
+  allowedCount: number
+  steps: AgentRunStep[]
+  summary: string
+}
+
+type CampaignDistribution = {
+  key: string
+  total: number
+  blocked: number
+}
+
+type CampaignCaseResult = {
+  id: string
+  label: string
+  type: string
+  severity: 'low' | 'medium' | 'high' | 'critical'
+  decision: DetectionResponse
+}
+
+type AdversaryCampaignResponse = {
+  runId: string
+  model: string
+  totalCases: number
+  blockedCases: number
+  detectionRate: number
+  typeDistribution: CampaignDistribution[]
+  severityDistribution: CampaignDistribution[]
+  topReasons: string[]
+  cases: CampaignCaseResult[]
+}
+
 const MAX_UPLOAD_FILE_SIZE = 1024 * 1024
+
+const typeLabels: Record<string, string> = {
+  prompt_injection: 'Prompt Injection',
+  command_injection: 'Command Injection',
+  path_traversal: 'Path Traversal',
+  data_exfiltration: 'Data Exfiltration',
+  code_injection: 'Code Injection',
+}
+
+const severityLabels: Record<string, string> = {
+  low: 'Low',
+  medium: 'Medium',
+  high: 'High',
+  critical: 'Critical',
+}
+
+const clampRisk = (value: number): number => {
+  if (!Number.isFinite(value)) {
+    return 0
+  }
+  return Math.max(0, Math.min(1, value))
+}
+
+const formatPercent = (value: number): string => `${(clampRisk(value) * 100).toFixed(1)}%`
+
+const formatTimestamp = (value: string): string => {
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) {
+    return value
+  }
+
+  return parsed.toLocaleTimeString('ko-KR', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  })
+}
+
+const getStatus = (risk: number): PipelineStep['status'] => {
+  if (risk >= 0.7) {
+    return 'critical'
+  }
+  if (risk >= 0.35) {
+    return 'warning'
+  }
+  return 'clear'
+}
+
+const getRiskTone = (risk: number): string => {
+  if (risk >= 0.7) {
+    return 'bg-ember'
+  }
+  if (risk >= 0.35) {
+    return 'bg-amber-500'
+  }
+  return 'bg-mint'
+}
+
+const buildPipeline = (data: DetectionResponse): PipelineStep[] => {
+  const intel = data.evidence.find((entry) => /threat|intel/i.test(entry.detectorId))
+  const rules = data.evidence.find((entry) => /rule/i.test(entry.detectorId))
+  const llm = data.evidence.find((entry) => /llm|openai|gpt/i.test(entry.detectorId))
+
+  return [
+    {
+      id: 'threat-intel',
+      title: 'ThreatIntel',
+      detail: intel ? `${intel.detectorId} 매칭 완료` : '위협 피드 매칭 없음',
+      risk: intel?.risk ?? 0,
+      confidence: intel?.confidence ?? 0,
+      status: getStatus(intel?.risk ?? 0),
+    },
+    {
+      id: 'rules',
+      title: 'Rules',
+      detail: rules ? `${rules.detectorId} 규칙 탐지` : '룰 기반 고위험 신호 없음',
+      risk: rules?.risk ?? 0,
+      confidence: rules?.confidence ?? 0,
+      status: getStatus(rules?.risk ?? 0),
+    },
+    {
+      id: 'llm',
+      title: 'LLM',
+      detail: llm ? `${llm.detectorId} 2차 분석` : 'LLM 2차 분석 신호 없음',
+      risk: llm?.risk ?? 0,
+      confidence: llm?.confidence ?? 0,
+      status: getStatus(llm?.risk ?? 0),
+    },
+  ]
+}
+
+function DetectionVisualization({ data }: { data: DetectionResponse }) {
+  const pipeline = buildPipeline(data)
+  const risk = clampRisk(data.risk)
+  const tone = getRiskTone(risk)
+  const timeline = [
+    {
+      id: 'ingest',
+      title: 'ToolCall 수신',
+      detail: '요청 파싱 및 정책 로드',
+    },
+    ...pipeline.map((step, index) => ({
+      id: `pipeline-${step.id}`,
+      title: `${index + 1}. ${step.title}`,
+      detail: `${step.status.toUpperCase()} · Risk ${formatPercent(step.risk)}`,
+    })),
+    {
+      id: 'decision',
+      title: 'DecisionEngine',
+      detail: `최종 판정 ${data.action.toUpperCase()} · Confidence ${formatPercent(data.confidence)}`,
+    },
+  ]
+
+  return (
+    <div className="grid gap-4 rounded-xl border border-slate-200 bg-[#f8fbff] p-4">
+      <div className="grid gap-2">
+        <div className="flex items-end justify-between">
+          <p className="text-sm font-semibold text-ink">Risk Gauge</p>
+          <p className="text-xs font-semibold text-steel/80">{formatPercent(risk)}</p>
+        </div>
+        <div className="h-2.5 w-full rounded-full bg-slate-200">
+          <div className={`${tone} h-2.5 rounded-full transition-all`} style={{ width: `${risk * 100}%` }} />
+        </div>
+      </div>
+
+      <div className="grid gap-2">
+        <p className="text-sm font-semibold text-ink">Detection Pipeline</p>
+        <ol className="grid gap-2">
+          {pipeline.map((step, index) => (
+            <li key={step.id} className="rounded-lg border border-slate-200 bg-white px-3 py-2">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-xs font-bold uppercase tracking-[0.12em] text-steel">
+                  {index + 1}. {step.title}
+                </p>
+                <span
+                  className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.1em] ${
+                    step.status === 'critical'
+                      ? 'bg-ember text-white'
+                      : step.status === 'warning'
+                        ? 'bg-amber-500 text-white'
+                        : 'bg-mint text-white'
+                  }`}
+                >
+                  {step.status}
+                </span>
+              </div>
+              <p className="mt-1 text-xs text-steel/85">{step.detail}</p>
+              <p className="mt-1 text-[11px] text-steel/75">
+                Risk {formatPercent(step.risk)} / Confidence {formatPercent(step.confidence)}
+              </p>
+            </li>
+          ))}
+          <li className="rounded-lg border border-slate-200 bg-white px-3 py-2">
+            <p className="text-xs font-bold uppercase tracking-[0.12em] text-steel">4. Decision</p>
+            <p className="mt-1 text-xs text-steel/85">DecisionEngine 최종 판정: {data.action.toUpperCase()}</p>
+          </li>
+        </ol>
+      </div>
+
+      <div className="grid gap-2">
+        <p className="text-sm font-semibold text-ink">Timeline</p>
+        <ol className="grid gap-1.5">
+          {timeline.map((entry) => (
+            <li key={entry.id} className="rounded-lg border border-slate-200 bg-white px-3 py-2">
+              <p className="text-xs font-bold uppercase tracking-[0.1em] text-steel">{entry.title}</p>
+              <p className="mt-1 text-xs text-steel/80">{entry.detail}</p>
+            </li>
+          ))}
+        </ol>
+      </div>
+    </div>
+  )
+}
 
 const presets: DemoPreset[] = [
   {
@@ -88,6 +330,19 @@ const presets: DemoPreset[] = [
   },
 ]
 
+const agentScenarios: AgentScenarioPreset[] = [
+  {
+    id: 'malicious-install',
+    title: '악성 Skill 설치',
+    summary: '다운로드 단계에서 위험 신호를 탐지하고 차단합니다.',
+  },
+  {
+    id: 'safe-workflow',
+    title: '정상 업무 시나리오',
+    summary: '정상 업무 툴 체인을 검사 후 허용합니다.',
+  },
+]
+
 export default function HomePage() {
   const [toolName, setToolName] = useState(presets[0].toolName)
   const [payloadText, setPayloadText] = useState(presets[0].payload)
@@ -99,10 +354,22 @@ export default function HomePage() {
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [uploadResult, setUploadResult] = useState<DetectionResponse | null>(null)
   const [selectedFileName, setSelectedFileName] = useState<string | null>(null)
+  const [selectedAgentScenarioId, setSelectedAgentScenarioId] = useState<AgentScenarioPreset['id']>(agentScenarios[0].id)
+  const [agentLoading, setAgentLoading] = useState(false)
+  const [agentError, setAgentError] = useState<string | null>(null)
+  const [agentResult, setAgentResult] = useState<AgentDemoResponse | null>(null)
+  const [campaignLoading, setCampaignLoading] = useState(false)
+  const [campaignError, setCampaignError] = useState<string | null>(null)
+  const [campaignResult, setCampaignResult] = useState<AdversaryCampaignResponse | null>(null)
 
   const selectedPreset = useMemo(
     () => presets.find((preset) => preset.id === selectedPresetId) ?? presets[0],
     [selectedPresetId]
+  )
+
+  const selectedAgentScenario = useMemo(
+    () => agentScenarios.find((scenario) => scenario.id === selectedAgentScenarioId) ?? agentScenarios[0],
+    [selectedAgentScenarioId]
   )
 
   const handlePresetChange = (preset: DemoPreset): void => {
@@ -195,6 +462,65 @@ export default function HomePage() {
       setUploadResult(null)
     } finally {
       setUploading(false)
+    }
+  }
+
+  const handleRunAgentDemo = async (executeBlocked = false): Promise<void> => {
+    setAgentLoading(true)
+    setAgentError(null)
+
+    try {
+      const response = await fetch('/api/agent-demo', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          scenarioId: selectedAgentScenario.id,
+          executeBlocked,
+        }),
+      })
+
+      const payload = (await response.json()) as AgentDemoResponse | { error?: string }
+
+      if (!response.ok) {
+        const message = 'error' in payload && payload.error ? payload.error : '에이전트 데모 실행에 실패했습니다.'
+        throw new Error(message)
+      }
+
+      setAgentResult(payload as AgentDemoResponse)
+    } catch (requestError) {
+      const message = requestError instanceof Error ? requestError.message : '알 수 없는 오류가 발생했습니다.'
+      setAgentError(message)
+      setAgentResult(null)
+    } finally {
+      setAgentLoading(false)
+    }
+  }
+
+  const handleRunCampaign = async (): Promise<void> => {
+    setCampaignLoading(true)
+    setCampaignError(null)
+
+    try {
+      const response = await fetch('/api/adversary-campaign', {
+        method: 'POST',
+      })
+
+      const payload = (await response.json()) as AdversaryCampaignResponse | { error?: string }
+
+      if (!response.ok) {
+        const message = 'error' in payload && payload.error ? payload.error : '캠페인 실행에 실패했습니다.'
+        throw new Error(message)
+      }
+
+      setCampaignResult(payload as AdversaryCampaignResponse)
+    } catch (requestError) {
+      const message = requestError instanceof Error ? requestError.message : '알 수 없는 오류가 발생했습니다.'
+      setCampaignError(message)
+      setCampaignResult(null)
+    } finally {
+      setCampaignLoading(false)
     }
   }
 
@@ -304,6 +630,8 @@ export default function HomePage() {
                     ))}
                   </ul>
                 </div>
+
+                <DetectionVisualization data={uploadResult} />
 
                 <div className="grid gap-2">
                   <p className="text-sm font-semibold text-ink">탐지기 근거</p>
@@ -428,6 +756,8 @@ export default function HomePage() {
                   </ul>
                 </div>
 
+                <DetectionVisualization data={result} />
+
                 <div className="grid gap-2">
                   <p className="text-sm font-semibold text-ink">탐지기 근거</p>
                   <div className="grid gap-2">
@@ -440,6 +770,266 @@ export default function HomePage() {
                       </div>
                     ))}
                   </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </section>
+
+      <section className="grid gap-6 rounded-3xl bg-white/90 p-7 shadow-aura md:p-10">
+        <div className="flex flex-col gap-2">
+          <h2 className="text-3xl font-bold text-ink">OpenAI Agent Live Demo</h2>
+          <p className="text-steel/85">
+            OpenAI Agents SDK guardrail 흐름을 실시간으로 시뮬레이션합니다. 각 tool call은 SapperAI 파이프라인을 거쳐
+            차단/허용됩니다.
+          </p>
+        </div>
+
+        <div className="grid gap-5 lg:grid-cols-[0.95fr_1.05fr]">
+          <div className="grid gap-4">
+            <div className="grid gap-3 sm:grid-cols-2">
+              {agentScenarios.map((scenario) => {
+                const isActive = scenario.id === selectedAgentScenarioId
+                return (
+                  <button
+                    key={scenario.id}
+                    type="button"
+                    className={`rounded-2xl border px-4 py-3 text-left transition ${
+                      isActive
+                        ? 'border-signal bg-signal/10 shadow-[0_12px_30px_rgba(42,127,255,0.2)]'
+                        : 'border-slate-200 bg-white hover:border-slate-300'
+                    }`}
+                    onClick={() => {
+                      setSelectedAgentScenarioId(scenario.id)
+                      setAgentResult(null)
+                      setAgentError(null)
+                    }}
+                  >
+                    <p className="text-sm font-bold text-ink">{scenario.title}</p>
+                    <p className="mt-1 text-xs text-steel/80">{scenario.summary}</p>
+                  </button>
+                )
+              })}
+            </div>
+
+            <button
+              type="button"
+              className="inline-flex items-center justify-center rounded-xl bg-steel px-4 py-3 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:bg-ink disabled:cursor-not-allowed disabled:opacity-60"
+              onClick={() => {
+                void handleRunAgentDemo(false)
+              }}
+              disabled={agentLoading}
+            >
+              {agentLoading ? '에이전트 실행 중...' : 'Agent Live Run 시작'}
+            </button>
+
+            {agentResult?.halted && (
+              <div className="rounded-xl border border-ember/30 bg-ember/10 p-4 text-sm text-ember">
+                <p className="font-semibold">고위험 요청이 차단되어 실행이 멈췄습니다.</p>
+                <p className="mt-1">데모를 계속하려면 아래 버튼으로 차단된 요청까지 강행 실행할 수 있습니다.</p>
+                <button
+                  type="button"
+                  className="mt-3 inline-flex items-center justify-center rounded-lg bg-ember px-3 py-2 text-xs font-semibold text-white transition hover:bg-[#e85a30]"
+                  onClick={() => {
+                    void handleRunAgentDemo(true)
+                  }}
+                  disabled={agentLoading}
+                >
+                  Execute anyway
+                </button>
+              </div>
+            )}
+
+            <p className="text-xs text-steel/70">
+              선택된 시나리오: <span className="font-semibold text-steel">{selectedAgentScenario.title}</span>
+            </p>
+          </div>
+
+          <div className="glass-card rounded-2xl border border-white/75 p-5">
+            {!agentResult && !agentError && (
+              <div className="grid gap-3 text-sm text-steel/85">
+                <p className="text-base font-semibold text-ink">실행 결과 대기 중</p>
+                <p>Agent Live Run을 시작하면 각 tool call의 차단/허용 결과와 GPT 기반 설명이 타임라인으로 표시됩니다.</p>
+              </div>
+            )}
+
+            {agentError && (
+              <div className="rounded-xl border border-ember/30 bg-ember/10 p-4 text-sm text-ember">
+                <p className="font-semibold">에이전트 데모 오류</p>
+                <p className="mt-1 whitespace-pre-wrap">{agentError}</p>
+              </div>
+            )}
+
+            {agentResult && (
+              <div className="grid gap-4">
+                <div className="flex flex-wrap items-center gap-2 text-xs">
+                  <span className="rounded-full bg-steel/10 px-3 py-1 font-semibold text-steel">{agentResult.model}</span>
+                  <span className="rounded-full bg-steel/10 px-3 py-1 font-semibold text-steel">
+                    Block {agentResult.blockedCount}
+                  </span>
+                  <span className="rounded-full bg-steel/10 px-3 py-1 font-semibold text-steel">
+                    Allow {agentResult.allowedCount}
+                  </span>
+                </div>
+
+                <p className="text-sm text-steel/85">{agentResult.summary}</p>
+
+                <ol className="grid gap-3">
+                  {agentResult.steps.map((step, index) => (
+                    <li key={step.stepId} className="rounded-xl border border-slate-200 bg-white p-4">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="text-xs font-bold uppercase tracking-[0.12em] text-steel">
+                          {index + 1}. {step.label}
+                        </p>
+                        <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.1em]">
+                          <span className={`rounded-full px-2 py-1 ${step.blocked ? 'bg-ember text-white' : 'bg-mint text-white'}`}>
+                            {step.blocked ? 'block' : 'allow'}
+                          </span>
+                          <span className="rounded-full bg-steel/10 px-2 py-1 text-steel">
+                            {step.executed ? 'executed' : 'stopped'}
+                          </span>
+                        </div>
+                      </div>
+
+                      <p className="mt-2 text-xs font-semibold text-steel">{step.toolName}</p>
+                      <p className="mt-1 rounded-lg bg-[#0f172a] px-3 py-2 font-mono text-[11px] text-slate-100">
+                        {step.argumentsPreview}
+                      </p>
+
+                      <div className="mt-3 h-2 w-full rounded-full bg-slate-200">
+                        <div
+                          className={`${getRiskTone(step.decision.risk)} h-2 rounded-full`}
+                          style={{ width: `${clampRisk(step.decision.risk) * 100}%` }}
+                        />
+                      </div>
+
+                      <p className="mt-1 text-[11px] text-steel/80">
+                        Risk {formatPercent(step.decision.risk)} / Confidence {formatPercent(step.decision.confidence)} /{' '}
+                        {formatTimestamp(step.timestamp)} / {step.durationMs}ms
+                      </p>
+                      <p className="mt-1 text-xs text-steel/90">{step.decision.reasons[0] ?? '탐지 사유 없음'}</p>
+                      <p className="mt-2 rounded-lg border border-slate-200 bg-[#f8fbff] px-3 py-2 text-xs text-steel/90">
+                        {step.analysis}
+                      </p>
+                    </li>
+                  ))}
+                </ol>
+              </div>
+            )}
+          </div>
+        </div>
+      </section>
+
+      <section className="grid gap-6 rounded-3xl bg-white/90 p-7 shadow-aura md:p-10">
+        <div className="flex flex-col gap-2">
+          <h2 className="text-3xl font-bold text-ink">Adversary Campaign Demo</h2>
+          <p className="text-steel/85">
+            원클릭으로 공격 캠페인을 실행해 탐지율, 유형 분포, 심각도 분포를 자동 리포트합니다.
+          </p>
+        </div>
+
+        <div className="grid gap-5 lg:grid-cols-[0.9fr_1.1fr]">
+          <div className="grid gap-4">
+            <button
+              type="button"
+              className="inline-flex items-center justify-center rounded-xl bg-steel px-4 py-3 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:bg-ink disabled:cursor-not-allowed disabled:opacity-60"
+              onClick={() => {
+                void handleRunCampaign()
+              }}
+              disabled={campaignLoading}
+            >
+              {campaignLoading ? '캠페인 실행 중...' : '원클릭 캠페인 실행'}
+            </button>
+
+            {campaignError && (
+              <div className="rounded-xl border border-ember/30 bg-ember/10 p-4 text-sm text-ember">
+                <p className="font-semibold">캠페인 실행 오류</p>
+                <p className="mt-1 whitespace-pre-wrap">{campaignError}</p>
+              </div>
+            )}
+
+            {campaignResult && (
+              <div className="grid gap-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="rounded-xl border border-slate-200 bg-white p-3">
+                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-steel">Detection Rate</p>
+                    <p className="mt-1 text-2xl font-bold text-ink">{formatPercent(campaignResult.detectionRate)}</p>
+                  </div>
+                  <div className="rounded-xl border border-slate-200 bg-white p-3">
+                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-steel">Blocked Cases</p>
+                    <p className="mt-1 text-2xl font-bold text-ink">
+                      {campaignResult.blockedCases}/{campaignResult.totalCases}
+                    </p>
+                  </div>
+                </div>
+                <p className="text-xs text-steel/75">
+                  Run ID: <span className="font-semibold text-steel">{campaignResult.runId}</span> / Model:{' '}
+                  <span className="font-semibold text-steel">{campaignResult.model}</span>
+                </p>
+              </div>
+            )}
+          </div>
+
+          <div className="glass-card rounded-2xl border border-white/75 p-5">
+            {!campaignResult && !campaignError && (
+              <div className="grid gap-3 text-sm text-steel/85">
+                <p className="text-base font-semibold text-ink">리포트 대기 중</p>
+                <p>원클릭 실행 후 공격 유형별 차단율과 상위 탐지 사유를 자동으로 요약합니다.</p>
+              </div>
+            )}
+
+            {campaignResult && (
+              <div className="grid gap-4">
+                <div className="grid gap-2">
+                  <p className="text-sm font-semibold text-ink">Type Distribution</p>
+                  {campaignResult.typeDistribution.map((item) => {
+                    const ratio = item.total > 0 ? item.blocked / item.total : 0
+                    return (
+                      <div key={item.key} className="grid gap-1">
+                        <div className="flex items-center justify-between text-xs text-steel">
+                          <span>{typeLabels[item.key] ?? item.key}</span>
+                          <span>
+                            {item.blocked}/{item.total}
+                          </span>
+                        </div>
+                        <div className="h-2 w-full rounded-full bg-slate-200">
+                          <div className="h-2 rounded-full bg-signal" style={{ width: `${ratio * 100}%` }} />
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+
+                <div className="grid gap-2">
+                  <p className="text-sm font-semibold text-ink">Severity Distribution</p>
+                  {campaignResult.severityDistribution.map((item) => {
+                    const ratio = item.total > 0 ? item.blocked / item.total : 0
+                    return (
+                      <div key={item.key} className="grid gap-1">
+                        <div className="flex items-center justify-between text-xs text-steel">
+                          <span>{severityLabels[item.key] ?? item.key}</span>
+                          <span>
+                            {item.blocked}/{item.total}
+                          </span>
+                        </div>
+                        <div className="h-2 w-full rounded-full bg-slate-200">
+                          <div className="h-2 rounded-full bg-ember" style={{ width: `${ratio * 100}%` }} />
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+
+                <div className="grid gap-2">
+                  <p className="text-sm font-semibold text-ink">Top Detection Reasons</p>
+                  <ul className="grid gap-2">
+                    {campaignResult.topReasons.map((reason) => (
+                      <li key={reason} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-steel">
+                        {reason}
+                      </li>
+                    ))}
+                  </ul>
                 </div>
               </div>
             )}
