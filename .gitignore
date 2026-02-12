@@ -18,3 +18,4 @@ scripts/run-real-env-mcp-scan.mjs
 # Agent Internal Files
 .sisyphus/
 .omc/
+.claude/
