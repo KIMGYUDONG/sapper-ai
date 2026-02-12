@@ -227,6 +227,10 @@ export class StdioSecurityProxy {
         metadata: this.toToolMetadataFromRecord(toolCall.meta),
       })
       if (preMatch.action === 'block' && policy.mode === 'enforce') {
+        this.logAuditEntry(
+          { kind: 'pre_tool_call', toolCall, policy } as AssessmentContext,
+          { action: 'block', risk: 1, confidence: 1, reasons: preMatch.reasons, evidence: [] }
+        )
         await this.forwardToDownstream(this.createBlockedResponse(message.id, 'pre_tool_call', preMatch.reasons))
         return
       }
@@ -246,7 +250,12 @@ export class StdioSecurityProxy {
       this.pendingToolCalls.set(this.toRequestKey(message.id), toolCall)
       await this.forwardToUpstream(message)
     } catch (error) {
-      this.downstreamTransport.onerror?.(this.ensureError(error))
+      const err = this.ensureError(error)
+      this.logAuditEntry(
+        { kind: 'pre_tool_call', policy: this.policy } as AssessmentContext,
+        this.createFailOpenDecision(err, 'handleDownstreamMessage error')
+      )
+      this.downstreamTransport.onerror?.(err)
     }
   }
 
@@ -277,7 +286,12 @@ export class StdioSecurityProxy {
       const intercepted = await this.interceptToolCallResponse(message, toolCall)
       await this.forwardToDownstream(intercepted)
     } catch (error) {
-      this.downstreamTransport.onerror?.(this.ensureError(error))
+      const err = this.ensureError(error)
+      this.logAuditEntry(
+        { kind: 'post_tool_result', policy: this.policy } as AssessmentContext,
+        this.createFailOpenDecision(err, 'handleUpstreamMessage error')
+      )
+      this.downstreamTransport.onerror?.(err)
     }
   }
 
@@ -525,7 +539,9 @@ export class StdioSecurityProxy {
     return {
       name: typeof meta.name === 'string' ? meta.name : undefined,
       packageName: typeof meta.packageName === 'string' ? meta.packageName : undefined,
-      sourceUrl: typeof meta.sourceUrl === 'string' ? meta.sourceUrl : typeof meta.url === 'string' ? meta.url : undefined,
+      sourceUrl: typeof meta.sourceUrl === 'string'
+        ? meta.sourceUrl
+        : (typeof meta.url === 'string' ? meta.url : undefined),
       sha256: typeof meta.sha256 === 'string' ? meta.sha256 : undefined,
       version: typeof meta.version === 'string' ? meta.version : undefined,
       ecosystem,
