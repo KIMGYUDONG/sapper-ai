@@ -1,7 +1,6 @@
 // Core logic for SapperAI
-import { version } from '@sapper-ai/types'
 
-export const coreVersion = version
+export const coreVersion = '0.2.0'
 
 export { RulesDetector } from './detectors/RulesDetector'
 export { LlmDetector } from './detectors/LlmDetector'

@@ -144,4 +144,4 @@ export interface AuditLogEntry {
   durationMs: number;
 }
 
-export const version = '0.1.0';
+

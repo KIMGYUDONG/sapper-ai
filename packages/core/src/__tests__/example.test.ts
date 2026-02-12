@@ -3,6 +3,6 @@ import { coreVersion } from '../index'
 
 describe('@sapper-ai/core', () => {
   it('should export coreVersion from types', () => {
-    expect(coreVersion).toBe('0.1.0')
+    expect(coreVersion).toBe('0.2.0')
   })
 })
