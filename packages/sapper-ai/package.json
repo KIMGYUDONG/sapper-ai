@@ -32,6 +32,7 @@
   },
   "scripts": {
     "build": "tsc",
+    "postinstall": "node dist/postinstall.js",
     "test": "vitest --run"
   },
   "dependencies": {
