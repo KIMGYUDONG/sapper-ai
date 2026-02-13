@@ -24,7 +24,7 @@ export default defineConfig({
   outputDir: path.join(__dirname, 'test-results'),
 
   use: {
-    baseURL: 'http://localhost:3000',
+    baseURL: process.env.PLAYWRIGHT_BASE_URL ?? 'http://localhost:3000',
     screenshot: 'only-on-failure',
     trace: 'on-first-retry',
     video: 'off',
