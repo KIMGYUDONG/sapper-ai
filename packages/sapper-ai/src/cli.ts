@@ -6,11 +6,22 @@ import { resolve } from 'node:path'
 import * as readline from 'node:readline'
 
 import { presets, type PresetName } from './presets'
+import { runScan } from './scan'
 
 export async function runCli(argv: string[] = process.argv.slice(2)): Promise<number> {
   if (argv[0] === '--help' || argv[0] === '-h') {
     printUsage()
     return 0
+  }
+
+  if (argv[0] === 'scan') {
+    const parsed = parseScanArgs(argv.slice(1))
+    if (!parsed) {
+      printUsage()
+      return 1
+    }
+
+    return runScan(parsed)
   }
 
   if (argv[0] === 'dashboard') {
@@ -31,12 +42,34 @@ function printUsage(): void {
 sapper-ai - AI security guardrails
 
 Usage:
-  sapper-ai init       Interactive setup wizard
-  sapper-ai dashboard  Launch web dashboard
-  sapper-ai --help     Show this help
+  sapper-ai scan          Scan environment for threats
+  sapper-ai scan --fix    Scan and quarantine blocked files
+  sapper-ai init          Interactive setup wizard
+  sapper-ai dashboard     Launch web dashboard
+  sapper-ai --help        Show this help
 
 Learn more: https://github.com/sapper-ai/sapperai
 `)
+}
+
+function parseScanArgs(argv: string[]): { targets: string[]; fix: boolean } | null {
+  const targets: string[] = []
+  let fix = false
+
+  for (const arg of argv) {
+    if (arg === '--fix') {
+      fix = true
+      continue
+    }
+
+    if (arg.startsWith('-')) {
+      return null
+    }
+
+    targets.push(arg)
+  }
+
+  return { targets, fix }
 }
 
 async function runDashboard(): Promise<number> {
