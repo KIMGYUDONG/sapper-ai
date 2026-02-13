@@ -8,6 +8,9 @@ export default defineConfig({
   fullyParallel: false,
   workers: 1,
 
+  globalSetup: path.join(__dirname, 'global-setup.ts'),
+  globalTeardown: path.join(__dirname, 'global-teardown.ts'),
+
   timeout: 60_000,
 
   reporter: [

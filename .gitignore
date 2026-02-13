@@ -22,3 +22,7 @@ scripts/run-real-env-mcp-scan.mjs
 
 # Generated artifacts
 packages/dashboard/standalone/
+
+e2e/.e2e-state.json
+e2e/test-results/
+e2e/playwright-report/

@@ -12,7 +12,7 @@
   "scripts": {
     "build": "turbo build",
     "dev:web": "pnpm --filter @sapper-ai/web dev",
-    "test": "turbo test",
+    "test": "turbo test --filter=!e2e",
     "lint": "turbo lint"
   },
   "devDependencies": {
