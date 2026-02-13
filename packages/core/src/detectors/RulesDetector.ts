@@ -20,11 +20,26 @@ const RULES: PatternRule[] = [
     regex: /ignore(?:\s+all)?\s+previous/i,
     severity: 'high',
   },
+  {
+    label: 'ignore previous (ko)',
+    regex: /(?:\uAE30\uC874|\uC774\uC804)\s*\uC9C0\uC2DC(?:\uB97C)?\s*\uBB34\uC2DC/i,
+    severity: 'high',
+  },
   { label: 'system prompt', regex: /system\s+prompt/i, severity: 'high' },
+  {
+    label: 'system prompt (ko)',
+    regex: /\uC2DC\uC2A4\uD15C\s*(?:\uD504\uB86C\uD504\uD2B8|\uC9C0\uC2DC|\uBA54\uC2DC\uC9C0)/i,
+    severity: 'high',
+  },
   { label: 'disregard', regex: /\bdisregard\b/i, severity: 'high' },
   {
     label: 'override instructions',
     regex: /override\s+instructions?/i,
+    severity: 'high',
+  },
+  {
+    label: 'override instructions (ko)',
+    regex: /\uC9C0\uC2DC(?:\uB97C)?\s*(?:\uBB34\uC2DC|\uBB35\uC0B4|\uB530\uB77C\uD558\uC9C0\s*\uB9C8)/i,
     severity: 'high',
   },
   { label: 'reveal your', regex: /reveal\s+your/i, severity: 'high' },
@@ -36,6 +51,11 @@ const RULES: PatternRule[] = [
     severity: 'high',
   },
   { label: 'admin password', regex: /admin\s+password/i, severity: 'high' },
+  {
+    label: 'admin password (ko)',
+    regex: /\uAD00\uB9AC\uC790\s*(?:\uBE44\uBC00\uBC88\uD638|\uD328\uC2A4\uC6CC\uB4DC|\uBE44\uBC00\uD0A4)/i,
+    severity: 'high',
+  },
   { label: '<script>', regex: /<script\b[^>]*>/i, severity: 'high' },
   { label: 'crlf injection', regex: /\r\n|%0d%0a/i, severity: 'high' },
   {
@@ -70,6 +90,27 @@ const RULES: PatternRule[] = [
     severity: 'high',
   },
   { label: 'secret exfiltration', regex: /api[_\s-]?keys?|secret[_\s-]?token|process\.env|reveal\s+confidential/i, severity: 'high' },
+  {
+    label: 'secret exfiltration (ko)',
+    regex: /(?:api\s*(?:\uD0A4|key)|\uBE44\uBC00\s*(?:\uD0A4|key)|\uC2DC\uD06C\uB9BF\s*(?:\uD0A4|key)?)/i,
+    severity: 'high',
+  },
+  {
+    label: 'security override (ko)',
+    regex:
+      /\uC81C\uD55C\s*\uC5C6\uC774|\uC81C\uC57D\s*\uC5C6\uC774|\uC548\uC804\s*\uD544\uD130\s*\uD574\uC81C|\uC548\uC804\s*\uAE30\uC900\s*\uD574\uC81C|\uBCF4\uC548\s*\uD544\uD130\s*\uD574\uC81C/i,
+    severity: 'high',
+  },
+  {
+    label: 'bypass (ko)',
+    regex: /\uC6B0\uD68C|\uBC14\uC774\uD328\uC2A4/i,
+    severity: 'medium',
+  },
+  {
+    label: 'jailbreak (ko)',
+    regex: /\uD0C8\uC625|\uAC10\uC625\s*\uD0C8\uCD9C/i,
+    severity: 'medium',
+  },
   { label: 'python os system', regex: /__import__\(|os\.system\(/i, severity: 'high' },
   { label: 'system function call', regex: /\bsystem\s*\('/i, severity: 'high' },
   { label: 'quoted comment sqli', regex: /'--\b/, severity: 'high' },
@@ -86,7 +127,7 @@ const RULES: PatternRule[] = [
 ]
 
 const EDUCATIONAL_CONTEXT =
-  /\b(tutorial|research|paper|learn|learning|discuss(?:es|ing)?|example|workshop|security warning|content moderation|false positive|how to|todo|development|debug|production|markdown|code snippet|should be filtered)\b/i
+  /(?:\b(tutorial|research|paper|learn|learning|discuss(?:es|ing)?|example|workshop|security warning|content moderation|false positive|how to|todo|development|debug|production|markdown|code snippet|should be filtered)\b|\uD29C\uD1A0\uB9AC\uC5BC|\uC608\uC81C|\uD559\uC2B5|\uC5F0\uAD6C|\uB17C\uBB38|\uC2E4\uC2B5|\uBCF4\uC548\s*\uACBD\uACE0)/i
 
 export class RulesDetector implements Detector {
   id = 'rules'
@@ -208,12 +249,17 @@ export class RulesDetector implements Detector {
 
     if (
       label === 'ignore previous' ||
+      label === 'ignore previous (ko)' ||
       label === 'system prompt' ||
+      label === 'system prompt (ko)' ||
       label === 'disregard' ||
       label === 'override instructions' ||
+      label === 'override instructions (ko)' ||
       label === 'reveal your' ||
       label === 'jailbreak' ||
+      label === 'jailbreak (ko)' ||
       label === 'bypass' ||
+      label === 'bypass (ko)' ||
       label === 'sql tautology' ||
       label === '<script>'
     ) {
