@@ -1,5 +1,13 @@
 # @sapper-ai/core
 
+## 0.2.1
+
+### Patch Changes
+
+- fix: publish post-0.2.0 changes including DetectorFactory, threat-intel, Korean detection
+- Updated dependencies
+  - @sapper-ai/types@0.2.1
+
 ## 0.2.0
 
 ### Minor Changes

@@ -1,6 +1,6 @@
 {
   "name": "sapper-ai",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "AI security guardrails - single install, sensible defaults",
   "keywords": [
     "security",
@@ -48,8 +48,8 @@
     "@sapper-ai/types": "workspace:*"
   },
   "peerDependencies": {
-    "@sapper-ai/mcp": ">=0.2.0",
-    "@sapper-ai/openai": ">=0.2.0"
+    "@sapper-ai/mcp": ">=0.2.1",
+    "@sapper-ai/openai": ">=0.2.1"
   },
   "peerDependenciesMeta": {
     "@sapper-ai/mcp": {
