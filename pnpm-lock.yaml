@@ -169,11 +169,11 @@ importers:
         specifier: workspace:*
         version: link:../core
       '@sapper-ai/mcp':
-        specifier: '>=0.2.0'
-        version: 0.2.0(zod@4.3.6)
+        specifier: workspace:^
+        version: link:../mcp
       '@sapper-ai/openai':
-        specifier: '>=0.2.0'
-        version: 0.2.0(zod@4.3.6)
+        specifier: workspace:^
+        version: link:../openai
       '@sapper-ai/types':
         specifier: workspace:*
         version: link:../types
@@ -672,19 +672,6 @@ packages:
     resolution: {integrity: sha512-mxRFDdHIWRxg3UfIIAwCm6NzvxG0jDX/wBN6KsQFTvKFqqg9vTrWUE68qEjHt19A5wwx5X5aUi2zuZT7YR0jrA==}
     cpu: [x64]
     os: [win32]
-
-  '@sapper-ai/core@0.2.0':
-    resolution: {integrity: sha512-NkMNB4f8zIid1B6/dC2b8wv+eGzqJVziP1WS/MieWECKwT7LOPpvHv303DSaclPwzhFv4qWDyZ1QNQw/4RMn0w==}
-
-  '@sapper-ai/mcp@0.2.0':
-    resolution: {integrity: sha512-n1IhmohKKWfYuQ3UX+bn+DV6eH7Uwip+F/Nr52yoHeHe+bSuw5czko0bpbS5ORIZi5gNauRYG83tIHQX2Pt+jA==}
-    hasBin: true
-
-  '@sapper-ai/openai@0.2.0':
-    resolution: {integrity: sha512-vshJhjcJQVP9UZrQl/e//yYKTlmxaeq/GrPpmsS2+O6VhI7FDD/ICeWN5/+YTaBY1B+xZCA3s4GitwA++6CMdw==}
-
-  '@sapper-ai/types@0.2.0':
-    resolution: {integrity: sha512-o+BN+emYvFlGRuR5RIsyOQ8Ockd3uhBjs/zyAW73yAAWv19KWWPPW+YMoaJQmC4d+GJ4LvUiD9U7mSv0Aa9ogw==}
 
   '@sinclair/typebox@0.27.10':
     resolution: {integrity: sha512-MTBk/3jGLNB2tVxv6uLlFh1iu64iYOQ2PbdOSK3NW8JZsmlaOh2q6sdtKowBhfw8QFLmYNzTW4/oK4uATIi6ZA==}
@@ -2436,37 +2423,6 @@ snapshots:
 
   '@rollup/rollup-win32-x64-msvc@4.57.1':
     optional: true
-
-  '@sapper-ai/core@0.2.0':
-    dependencies:
-      '@sapper-ai/types': 0.2.0
-      yaml: 2.8.2
-      zod: 4.3.6
-
-  '@sapper-ai/mcp@0.2.0(zod@4.3.6)':
-    dependencies:
-      '@modelcontextprotocol/sdk': 1.26.0(zod@4.3.6)
-      '@sapper-ai/core': 0.2.0
-      '@sapper-ai/types': 0.2.0
-    transitivePeerDependencies:
-      - '@cfworker/json-schema'
-      - supports-color
-      - zod
-
-  '@sapper-ai/openai@0.2.0(zod@4.3.6)':
-    dependencies:
-      '@openai/agents': 0.4.6(ws@8.19.0)(zod@4.3.6)
-      '@sapper-ai/core': 0.2.0
-      '@sapper-ai/types': 0.2.0
-    transitivePeerDependencies:
-      - '@cfworker/json-schema'
-      - bufferutil
-      - supports-color
-      - utf-8-validate
-      - ws
-      - zod
-
-  '@sapper-ai/types@0.2.0': {}
 
   '@sinclair/typebox@0.27.10': {}
 

@@ -48,8 +48,8 @@
     "@sapper-ai/types": "workspace:*"
   },
   "peerDependencies": {
-    "@sapper-ai/mcp": ">=0.2.1",
-    "@sapper-ai/openai": ">=0.2.1"
+    "@sapper-ai/mcp": "workspace:^",
+    "@sapper-ai/openai": "workspace:^"
   },
   "peerDependenciesMeta": {
     "@sapper-ai/mcp": {
