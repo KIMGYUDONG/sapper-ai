@@ -18,7 +18,10 @@ SapperAI provides **zero-dependency threat detection** with:
 ### Option 1: Single Install (Recommended)
 
 ```bash
-pnpm add sapper-ai
+npm install sapper-ai
+# or
+pnpm install sapper-ai
+
 npx sapper-ai init
 ```
 
@@ -32,7 +35,9 @@ const decision = await guard.check({ toolName: 'shell', arguments: { cmd: 'ls' }
 ### Option 2: MCP Proxy (No Code)
 
 ```bash
-pnpm add @sapper-ai/mcp
+npm install @sapper-ai/mcp
+# or
+pnpm install @sapper-ai/mcp
 
 # Wrap any MCP server
 sapperai-proxy -- npx @modelcontextprotocol/server-example
@@ -48,7 +53,9 @@ sapperai-proxy quarantine restore <id>
 ### Option 3: OpenAI Agents Integration
 
 ```bash
-pnpm add @sapper-ai/openai
+npm install @sapper-ai/openai
+# or
+pnpm install @sapper-ai/openai
 ```
 
 ```typescript
@@ -168,11 +175,6 @@ git clone https://github.com/sapper-ai/sapperai.git
 cd sapperai
 pnpm install
 pnpm build
-
-# Individual packages (for usage)
-pnpm add @sapper-ai/core
-pnpm add @sapper-ai/mcp
-pnpm add @sapper-ai/openai
 ```
 
 ## Development
