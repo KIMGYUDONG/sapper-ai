@@ -19,3 +19,6 @@ scripts/run-real-env-mcp-scan.mjs
 .sisyphus/
 .omc/
 .claude/
+
+# Generated artifacts
+packages/dashboard/standalone/

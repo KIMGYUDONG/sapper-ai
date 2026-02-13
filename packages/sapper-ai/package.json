@@ -1,0 +1,54 @@
+{
+  "name": "sapper-ai",
+  "version": "0.2.0",
+  "description": "AI security guardrails - single install, sensible defaults",
+  "keywords": ["security", "ai", "guardrails", "prompt-injection", "detection"],
+  "license": "MIT",
+  "author": "SapperAI",
+  "homepage": "https://github.com/sapper-ai/sapperai#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/sapper-ai/sapperai.git",
+    "directory": "packages/sapper-ai"
+  },
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "sapper-ai": "./dist/cli.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./presets": {
+      "types": "./dist/presets.d.ts",
+      "default": "./dist/presets.js"
+    }
+  },
+  "files": ["dist"],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest --run"
+  },
+  "dependencies": {
+    "@sapper-ai/core": "workspace:*",
+    "@sapper-ai/types": "workspace:*"
+  },
+  "peerDependencies": {
+    "@sapper-ai/mcp": ">=0.2.0",
+    "@sapper-ai/openai": ">=0.2.0"
+  },
+  "peerDependenciesMeta": {
+    "@sapper-ai/mcp": { "optional": true },
+    "@sapper-ai/openai": { "optional": true }
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.3.0",
+    "vitest": "^1.0.0"
+  }
+}
