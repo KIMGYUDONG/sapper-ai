@@ -107,6 +107,15 @@ importers:
         specifier: ^1.0.0
         version: 1.6.1(@types/node@20.19.33)
 
+  packages/dashboard:
+    dependencies:
+      '@sapper-ai/core':
+        specifier: workspace:*
+        version: link:../core
+      '@sapper-ai/types':
+        specifier: workspace:*
+        version: link:../types
+
   packages/mcp:
     dependencies:
       '@modelcontextprotocol/sdk':
