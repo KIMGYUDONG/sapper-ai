@@ -40,7 +40,7 @@
   },
   "scripts": {
     "build": "tsc",
-    "postinstall": "node dist/postinstall.js",
+    "postinstall": "node dist/postinstall.js || exit 0",
     "test": "vitest --run"
   },
   "dependencies": {
