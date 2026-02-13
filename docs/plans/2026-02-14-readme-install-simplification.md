@@ -1,69 +1,48 @@
-# README Installation Command Simplification
+# README Quick Start Simplification
 
 ## Goal
 
-Simplify installation commands in root README to use only `npm install` and `pnpm install`, removing `pnpm add` and redundant sections.
+Simplify root README Quick Start to a single install path (`npm install` / `pnpm install sapper-ai` only). Remove Option 2 (MCP), Option 3 (OpenAI), and redundant Installation section entries.
 
 ## Decisions
 
 - **Commands**: `pnpm add` → `npm install` / `pnpm install` (parallel display with `# or`)
+- **Quick Start**: Collapse 3 options → single `sapper-ai` install only
+- **Option 2 (MCP), Option 3 (OpenAI)**: Delete entirely from Quick Start (already in sub-package READMEs + Packages table links)
+- **Installation section**: Remove "Individual packages" block (redundant)
 - **Scope**: Root `README.md` only (sub-package READMEs unchanged)
-- **Installation section**: Remove "Individual packages" block (redundant with Quick Start)
 
 ## TODO List
 
-### 1. Update Quick Start - Option 1 (line 20-23)
+### 1. Replace Quick Start section (line 16-73)
 
 **File**: `README.md`
 
-**Before**:
-```bash
-pnpm add sapper-ai
-npx sapper-ai init
-```
+Replace the entire Quick Start section (3 options + code examples) with:
 
-**After**:
+```md
+## Quick Start
+
 ```bash
 npm install sapper-ai
 # or
 pnpm install sapper-ai
-
-npx sapper-ai init
 ```
 
-### 2. Update Quick Start - Option 2 (line 34-36)
+```ts
+import { createGuard } from 'sapper-ai'
 
-**File**: `README.md`
-
-**Before**:
-```bash
-pnpm add @sapper-ai/mcp
+const guard = createGuard()
+const decision = await guard.check({ toolName: 'shell', arguments: { cmd: 'ls' } })
+```
 ```
 
-**After**:
-```bash
-npm install @sapper-ai/mcp
-# or
-pnpm install @sapper-ai/mcp
-```
+This removes:
+- `### Option 1: Single Install (Recommended)` heading
+- `### Option 2: MCP Proxy (No Code)` heading + install command + CLI examples (line 32-46)
+- `### Option 3: OpenAI Agents Integration` heading + install command + code example (line 48-73)
 
-### 3. Update Quick Start - Option 3 (line 50-52)
-
-**File**: `README.md`
-
-**Before**:
-```bash
-pnpm add @sapper-ai/openai
-```
-
-**After**:
-```bash
-npm install @sapper-ai/openai
-# or
-pnpm install @sapper-ai/openai
-```
-
-### 4. Remove "Individual packages" from Installation section (line 172-175)
+### 2. Remove "Individual packages" from Installation section (line 172-175)
 
 **File**: `README.md`
 
@@ -93,12 +72,17 @@ pnpm build
 ## Not Changed
 
 - Sub-package READMEs (`packages/*/README.md`) — keep `pnpm add` as-is
-- `npx sapper-ai init` — unchanged (package manager agnostic)
-- All code examples — unchanged
+- `npx sapper-ai init` — removed (was part of Option 1, not needed in minimal Quick Start)
+- Architecture section — unchanged
+- Packages table — unchanged (provides links to MCP/OpenAI sub-packages)
+- Direct Integration (Advanced) section — unchanged
+- Detection Capabilities, Performance, Verified Metrics — unchanged
 
 ## Verification
 
+- [ ] Quick Start has no Option headings, just one install block + one code block
 - [ ] `pnpm add` does not appear in root README
-- [ ] All 3 Quick Start options show `npm install` / `# or` / `pnpm install`
+- [ ] MCP and OpenAI install/code examples are gone from Quick Start
 - [ ] Installation section only contains monorepo clone instructions
-- [ ] No other content modified
+- [ ] Packages table still links to all sub-packages
+- [ ] No other sections modified
