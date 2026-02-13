@@ -219,7 +219,7 @@ test.describe('SapperAI web app QA', () => {
     await expect(section.getByText('Action', { exact: true })).toBeVisible()
     await expect(section.getByText('Risk', { exact: true })).toBeVisible()
 
-    const caseRows = section.locator('ul.divide-y.divide-slate-200 > li')
+    const caseRows = section.locator('ul.divide-y.divide-border > li')
     expect(await caseRows.count()).toBeGreaterThanOrEqual(5)
 
     await page.screenshot({
