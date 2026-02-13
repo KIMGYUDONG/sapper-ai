@@ -2,8 +2,6 @@
 
 Lightweight, rules-based security framework for AI systems. Detect and block prompt injection, command injection, and other threats in real-time.
 
-## Motivation
-
 AI agents with tool-calling capabilities face critical security risks:
 - **Prompt injection**: Malicious instructions in user input override system behavior
 - **Command injection**: Dangerous commands executed through tools (rm -rf, SQL injection, etc.)
@@ -14,6 +12,65 @@ SapperAI provides **zero-dependency threat detection** with:
 - ✅ **Zero false positives** (0/100 benign samples blocked)
 - ✅ **Sub-millisecond latency** (p99: 0.0018ms for rules-only)
 - ✅ **Fail-open design** (availability over security)
+
+## Quick Start
+
+### Option 1: Single Install (Recommended)
+
+```bash
+pnpm add sapper-ai
+npx sapper-ai init
+```
+
+```ts
+import { createGuard } from 'sapper-ai'
+
+const guard = createGuard()
+const decision = await guard.check({ toolName: 'shell', arguments: { cmd: 'ls' } })
+```
+
+### Option 2: MCP Proxy (No Code)
+
+```bash
+pnpm add @sapper-ai/mcp
+
+# Wrap any MCP server
+sapperai-proxy -- npx @modelcontextprotocol/server-example
+
+# Watch local skill/plugin installs and auto-quarantine blocked files
+sapperai-proxy watch
+
+# Inspect or restore quarantine
+sapperai-proxy quarantine list
+sapperai-proxy quarantine restore <id>
+```
+
+### Option 3: OpenAI Agents Integration
+
+```bash
+pnpm add @sapper-ai/openai
+```
+
+```typescript
+import { createToolInputGuardrail } from '@sapper-ai/openai'
+import { RulesDetector, DecisionEngine } from '@sapper-ai/core'
+import { Agent } from '@openai/agents'
+
+const detector = new RulesDetector()
+const engine = new DecisionEngine([detector])
+
+const inputGuardrail = createToolInputGuardrail(engine, {
+  mode: 'enforce',
+  defaultAction: 'allow',
+  failOpen: true,
+})
+
+const agent = new Agent({
+  model: 'gpt-4',
+  tools: [myTool],
+  inputGuardrail,
+})
+```
 
 ## Architecture
 
@@ -40,61 +97,34 @@ Detection Pipeline:
 
 | Package | Description | Use Case |
 |---------|-------------|----------|
+| **[sapper-ai](./packages/sapper-ai)** | Single-install wrapper (createGuard + presets + CLI) | Default entry point |
 | **[@sapper-ai/types](./packages/types)** | TypeScript type definitions | Custom detectors, integrations |
 | **[@sapper-ai/core](./packages/core)** | Core detection engine (RulesDetector, DecisionEngine, Guard) | Direct integration |
 | **[@sapper-ai/mcp](./packages/mcp)** | MCP security proxy | Wrap any MCP server |
 | **[@sapper-ai/openai](./packages/openai)** | OpenAI Agents SDK guardrails | Drop-in for @openai/agents |
 
-## Quick Start
+## Direct Integration (Advanced)
 
-### Option 1: MCP Proxy (No Code)
+```ts
+import { AuditLogger, DecisionEngine, Guard, RulesDetector } from '@sapper-ai/core'
+import type { Policy } from '@sapper-ai/types'
 
-```bash
-pnpm add @sapper-ai/mcp
-
-# Wrap any MCP server
-sapperai-proxy -- npx @modelcontextprotocol/server-example
-
-# Watch local skill/plugin installs and auto-quarantine blocked files
-sapperai-proxy watch
-
-# Inspect or restore quarantine
-sapperai-proxy quarantine list
-sapperai-proxy quarantine restore <id>
-```
-
-### Option 2: OpenAI Agents Integration
-
-```typescript
-import { createToolInputGuardrail } from '@sapper-ai/openai'
-import { RulesDetector, DecisionEngine } from '@sapper-ai/core'
-import { Agent } from '@openai/agents'
-
-const detector = new RulesDetector()
-const engine = new DecisionEngine([detector])
-const inputGuardrail = createToolInputGuardrail(engine, {
+const policy: Policy = {
   mode: 'enforce',
   defaultAction: 'allow',
   failOpen: true,
-})
-
-const agent = new Agent({
-  model: 'gpt-4',
-  tools: [myTool],
-  inputGuardrail,
-})
-```
-
-### Option 3: Direct Integration
-
-```typescript
-import { Guard, RulesDetector, DecisionEngine } from '@sapper-ai/core'
+}
 
 const detector = new RulesDetector()
 const engine = new DecisionEngine([detector])
-const guard = new Guard(engine, { mode: 'enforce', defaultAction: 'allow', failOpen: true })
+const auditLogger = new AuditLogger()
+const guard = new Guard(engine, auditLogger, policy)
 
-const decision = await guard.assessToolCall('executeCommand', { command: 'rm -rf /' }, {})
+const decision = await guard.preTool({
+  toolName: 'executeCommand',
+  arguments: { command: 'rm -rf /' },
+})
+
 if (decision.action === 'block') {
   throw new Error(`Blocked: ${decision.reasons.join(', ')}`)
 }
@@ -121,6 +151,14 @@ RulesDetector.run - small (50B)     737,726 ops/sec  p99: 0.0018ms
 DecisionEngine.assess - small       391,201 ops/sec  p99: 0.0030ms
 DecisionEngine.assess - large (5KB)  30,785 ops/sec  p99: 0.0424ms
 ```
+
+## Verified Metrics (MVP)
+
+- **Test Coverage**: 90 tests (19 types + 50 core + 11 mcp + 10 openai)
+- **Detection Rate**: 96% (48/50 malicious samples)
+- **False Positives**: 0% (0/100 benign samples)
+- **Edge Cases**: 0% false positives (0/20 edge case samples)
+- **Latency**: p99 < 10ms (Rules-only)
 
 ## Installation
 
@@ -162,14 +200,6 @@ pnpm --filter @sapper-ai/core run bench
 - Watch + quarantine: `docs/ops/watch-quarantine.md`
 - Threat intel + blocklist: `docs/ops/threat-intel.md`
 - Adversary campaigns: `docs/ops/adversary.md`
-
-## Verified Metrics (MVP)
-
-- **Test Coverage**: 90 tests (19 types + 50 core + 11 mcp + 10 openai)
-- **Detection Rate**: 96% (48/50 malicious samples)
-- **False Positives**: 0% (0/100 benign samples)
-- **Edge Cases**: 0% false positives (0/20 edge case samples)
-- **Latency**: p99 < 10ms (Rules-only)
 
 ## License
 
