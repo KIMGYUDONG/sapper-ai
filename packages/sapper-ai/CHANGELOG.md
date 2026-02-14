@@ -1,5 +1,11 @@
 # sapper-ai
 
+## 0.3.0
+
+### Minor Changes
+
+- 649d9a2: Redesign scan CLI UX: interactive scope selection, progress bar, colored findings table
+
 ## 0.2.2
 
 ### Patch Changes
