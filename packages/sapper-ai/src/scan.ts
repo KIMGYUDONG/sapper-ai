@@ -21,6 +21,9 @@ import { presets } from './presets'
 export interface ScanOptions {
   targets?: string[]
   fix?: boolean
+  deep?: boolean
+  system?: boolean
+  scopeLabel?: string
 }
 
 interface ScanFinding {
@@ -35,6 +38,22 @@ interface ScanFileResult {
 }
 
 const CONFIG_FILE_NAMES = ['sapperai.config.yaml', 'sapperai.config.yml']
+
+const GREEN = '\x1b[32m'
+const YELLOW = '\x1b[33m'
+const RED = '\x1b[31m'
+const RESET = '\x1b[0m'
+
+const SYSTEM_SCAN_PATHS = (() => {
+  const home = homedir()
+  return [
+    join(home, '.claude'),
+    join(home, '.config', 'claude-code'),
+    join(home, '.cursor'),
+    join(home, '.vscode', 'extensions'),
+    join(home, 'Library', 'Application Support', 'Claude'),
+  ]
+})()
 
 function findConfigFile(cwd: string): string | null {
   for (const name of CONFIG_FILE_NAMES) {
@@ -72,17 +91,12 @@ function getThresholds(policy: Policy): { riskThreshold: number; blockMinConfide
   return { riskThreshold, blockMinConfidence }
 }
 
-function toDefaultTargets(cwd: string): string[] {
-  const home = homedir()
-  return [join(home, '.claude', 'plugins'), join(home, '.config', 'claude-code'), cwd]
-}
-
 function shouldSkipDir(dirName: string): boolean {
   const base = basename(dirName)
   return base === 'node_modules' || base === '.git' || base === 'dist'
 }
 
-async function collectFiles(targetPath: string): Promise<string[]> {
+async function collectFiles(targetPath: string, deep: boolean): Promise<string[]> {
   try {
     const info = await stat(targetPath)
     if (info.isFile()) {
@@ -93,6 +107,20 @@ async function collectFiles(targetPath: string): Promise<string[]> {
     }
   } catch {
     return []
+  }
+
+  if (!deep) {
+    try {
+      const entries = await readdir(targetPath, { withFileTypes: true })
+      const results: string[] = []
+      for (const entry of entries) {
+        if (!entry.isFile()) continue
+        results.push(join(targetPath, entry.name))
+      }
+      return results
+    } catch {
+      return []
+    }
   }
 
   const results: string[] = []
@@ -127,6 +155,112 @@ async function collectFiles(targetPath: string): Promise<string[]> {
   }
 
   return results
+}
+
+function riskColor(risk: number): string {
+  if (risk >= 0.8) return RED
+  if (risk >= 0.5) return YELLOW
+  return GREEN
+}
+
+function stripAnsi(text: string): string {
+  return text.replace(/\x1b\[[0-9;]*m/g, '')
+}
+
+function truncateToWidth(text: string, maxWidth: number): string {
+  if (maxWidth <= 0) {
+    return ''
+  }
+  if (text.length <= maxWidth) {
+    return text
+  }
+
+  if (maxWidth <= 3) {
+    return '.'.repeat(maxWidth)
+  }
+
+  return `...${text.slice(text.length - (maxWidth - 3))}`
+}
+
+function renderProgressBar(current: number, total: number, width: number): string {
+  const safeTotal = Math.max(1, total)
+  const pct = Math.floor((current / safeTotal) * 100)
+  const filled = Math.floor((current / safeTotal) * width)
+  const bar = '█'.repeat(filled) + '░'.repeat(Math.max(0, width - filled))
+  return `  ${bar}  ${pct}% │ ${current}/${total} files`
+}
+
+function extractPatternLabel(decision: Decision): string {
+  const reason = decision.reasons[0]
+  if (!reason) return 'threat'
+  return reason.startsWith('Detected pattern: ') ? reason.slice('Detected pattern: '.length) : reason
+}
+
+function padRight(text: string, width: number): string {
+  if (text.length >= width) return text
+  return text + ' '.repeat(width - text.length)
+}
+
+function padRightVisual(text: string, width: number): string {
+  const visLen = stripAnsi(text).length
+  if (visLen >= width) return text
+  return text + ' '.repeat(width - visLen)
+}
+
+function padLeft(text: string, width: number): string {
+  if (text.length >= width) return text
+  return ' '.repeat(width - text.length) + text
+}
+
+function renderFindingsTable(
+  findings: ScanFinding[],
+  opts: { cwd: string; columns: number; color: boolean }
+): string[] {
+  const rows = findings.map((f, i) => {
+    const file = f.filePath.startsWith(opts.cwd + '/') ? f.filePath.slice(opts.cwd.length + 1) : f.filePath
+    const pattern = extractPatternLabel(f.decision)
+    const riskValue = f.decision.risk.toFixed(2)
+    const riskPlain = padLeft(riskValue, 4)
+    const risk = opts.color ? `${riskColor(f.decision.risk)}${riskPlain}${RESET}` : riskPlain
+    return { idx: String(i + 1), file, risk, pattern }
+  })
+
+  const idxWidth = Math.max(1, ...rows.map((r) => r.idx.length))
+  const riskWidth = 4
+  const patternWidth = Math.min(20, Math.max('Pattern'.length, ...rows.map((r) => r.pattern.length)))
+
+  const baseWidth = 2 + idxWidth + 2 + 2 + riskWidth + 2 + 2 + patternWidth + 2
+  const maxTableWidth = Math.max(60, Math.min(opts.columns || 80, 120))
+  const fileWidth = Math.max(20, Math.min(50, maxTableWidth - baseWidth))
+
+  const top = `  ┌${'─'.repeat(idxWidth + 2)}┬${'─'.repeat(fileWidth + 2)}┬${'─'.repeat(riskWidth + 2)}┬${'─'.repeat(
+    patternWidth + 2
+  )}┐`
+  const header = `  │ ${padRight('#', idxWidth)} │ ${padRight('File', fileWidth)} │ ${padRight(
+    'Risk',
+    riskWidth
+  )} │ ${padRight('Pattern', patternWidth)} │`
+  const sep = `  ├${'─'.repeat(idxWidth + 2)}┼${'─'.repeat(fileWidth + 2)}┼${'─'.repeat(riskWidth + 2)}┼${'─'.repeat(
+    patternWidth + 2
+  )}┤`
+
+  const lines = [top, header, sep]
+  for (const r of rows) {
+    const file = truncateToWidth(r.file, fileWidth)
+    const pattern = truncateToWidth(r.pattern, patternWidth)
+    lines.push(
+      `  │ ${padRight(r.idx, idxWidth)} │ ${padRight(file, fileWidth)} │ ${padRightVisual(r.risk, riskWidth)} │ ${padRight(
+        pattern,
+        patternWidth
+      )} │`
+    )
+  }
+
+  const bottom = `  └${'─'.repeat(idxWidth + 2)}┴${'─'.repeat(fileWidth + 2)}┴${'─'.repeat(riskWidth + 2)}┴${'─'.repeat(
+    patternWidth + 2
+  )}┘`
+  lines.push(bottom)
+  return lines
 }
 
 function isThreat(decision: Decision, policy: Policy): boolean {
@@ -207,71 +341,106 @@ async function scanFile(
   return { scanned: true, finding: { filePath, decision: bestThreat } }
 }
 
-function formatFindingLine(index: number, finding: ScanFinding): string {
-  const reason = finding.decision.reasons[0]
-  const label = reason?.startsWith('Detected pattern: ')
-    ? reason.slice('Detected pattern: '.length)
-    : reason ?? 'threat'
-
-  const risk = finding.decision.risk.toFixed(2)
-  const quarantineSuffix = finding.quarantinedId ? ` (quarantined: ${finding.quarantinedId})` : ''
-  return `  ${index}. ${finding.filePath}\n     Risk: ${risk} | ${label}${quarantineSuffix}`
-}
-
 export async function runScan(options: ScanOptions = {}): Promise<number> {
   const cwd = process.cwd()
   const policy = resolvePolicy(cwd)
   const fix = options.fix === true
 
-  const targets = options.targets && options.targets.length > 0 ? options.targets : toDefaultTargets(cwd)
+  const deep = options.system ? true : options.deep !== false
+  const targets =
+    options.system === true
+      ? SYSTEM_SCAN_PATHS
+      : options.targets && options.targets.length > 0
+        ? options.targets
+        : [cwd]
+
   const scanner = new Scanner()
   const detectors = createDetectors({ policy })
   const quarantineDir = process.env.SAPPERAI_QUARANTINE_DIR
   const quarantineManager = quarantineDir ? new QuarantineManager({ quarantineDir }) : new QuarantineManager()
 
-  console.log('\n  SapperAI Environment Scan\n')
-  console.log('  Scanning:')
-  for (const target of targets) {
-    console.log(`    ${target}`)
-  }
+  const isTTY = process.stdout.isTTY === true
+  const color = isTTY
+  const scopeLabel =
+    options.scopeLabel ??
+    (options.system
+      ? 'AI system scan'
+      : deep
+        ? 'Current + subdirectories'
+        : 'Current directory only')
+
+  console.log('\n  SapperAI Security Scanner\n')
+  console.log(`  Scope: ${scopeLabel}`)
   console.log()
 
   const fileSet = new Set<string>()
   for (const target of targets) {
-    const files = await collectFiles(target)
+    const files = await collectFiles(target, deep)
     for (const f of files) {
       fileSet.add(f)
     }
   }
 
-  let scannedFiles = 0
+  const files = Array.from(fileSet).sort()
+  console.log(`  Collecting files...  ${files.length} files found`)
+  console.log()
+
   const findings: ScanFinding[] = []
 
-  for (const filePath of Array.from(fileSet).sort()) {
-    const result = await scanFile(filePath, policy, scanner, detectors, fix, quarantineManager)
-    if (result.scanned) {
-      scannedFiles += 1
+  const total = files.length
+  const progressWidth = Math.max(10, Math.min(30, (process.stdout.columns ?? 80) - 30))
+
+  for (let i = 0; i < files.length; i += 1) {
+    const filePath = files[i]!
+
+    if (isTTY && total > 0) {
+      const bar = renderProgressBar(i + 1, total, progressWidth)
+      const label = '  Scanning: '
+      const maxPath = Math.max(10, (process.stdout.columns ?? 80) - stripAnsi(bar).length - label.length)
+      const scanning = `${label}${truncateToWidth(filePath, maxPath)}`
+
+      if (i === 0) {
+        process.stdout.write(`${bar}\n${scanning}\n`)
+      } else {
+        process.stdout.write(`\x1b[2A\x1b[2K\r${bar}\n\x1b[2K\r${scanning}\n`)
+      }
     }
+
+    const result = await scanFile(filePath, policy, scanner, detectors, fix, quarantineManager)
     if (result.finding) {
       findings.push(result.finding)
     }
   }
 
-  console.log('  Results:')
-  console.log(`    ${scannedFiles} files scanned, ${findings.length} threats detected`)
-  console.log()
-
-  if (findings.length > 0) {
-    findings.forEach((finding, idx) => {
-      console.log(formatFindingLine(idx + 1, finding))
-      console.log()
-    })
-
-    if (!fix) {
-      console.log("  Run 'npx sapper-ai scan --fix' to quarantine blocked files.")
-      console.log()
-    }
+  if (isTTY && total > 0) {
+    process.stdout.write('\x1b[2A\x1b[2K\r\x1b[1B\x1b[2K\r')
   }
 
-  return findings.length > 0 ? 1 : 0
+  if (findings.length === 0) {
+    const msg = `  ✓ All clear — ${total} files scanned, 0 threats detected`
+    console.log(color ? `${GREEN}${msg}${RESET}` : msg)
+    console.log()
+    return 0
+  }
+
+  const warn = `  ⚠ ${total} files scanned, ${findings.length} threats detected`
+  console.log(color ? `${RED}${warn}${RESET}` : warn)
+  console.log()
+
+  const tableLines = renderFindingsTable(findings, {
+    cwd,
+    columns: process.stdout.columns ?? 80,
+    color,
+  })
+  for (const line of tableLines) {
+    console.log(line)
+  }
+  console.log()
+
+  if (!fix) {
+    console.log("  Run 'npx sapper-ai scan --fix' to quarantine blocked files.")
+    console.log()
+  }
+
+  return 1
 }

@@ -2,11 +2,12 @@
 
 import { existsSync, writeFileSync } from 'node:fs'
 import { spawn } from 'node:child_process'
-import { resolve } from 'node:path'
+import { homedir } from 'node:os'
+import { join, resolve } from 'node:path'
 import * as readline from 'node:readline'
 
 import { presets, type PresetName } from './presets'
-import { runScan } from './scan'
+import { runScan, type ScanOptions } from './scan'
 
 export async function runCli(argv: string[] = process.argv.slice(2)): Promise<number> {
   if (argv[0] === '--help' || argv[0] === '-h') {
@@ -21,7 +22,13 @@ export async function runCli(argv: string[] = process.argv.slice(2)): Promise<nu
       return 1
     }
 
-    return runScan(parsed)
+    const scanOptions = await resolveScanOptions(parsed)
+    if (!scanOptions) {
+      printUsage()
+      return 1
+    }
+
+    return runScan(scanOptions)
   }
 
   if (argv[0] === 'dashboard') {
@@ -42,8 +49,12 @@ function printUsage(): void {
 sapper-ai - AI security guardrails
 
 Usage:
-  sapper-ai scan          Scan environment for threats
-  sapper-ai scan --fix    Scan and quarantine blocked files
+  sapper-ai scan              Interactive scan scope (TTY only)
+  sapper-ai scan .            Current directory only (no subdirectories)
+  sapper-ai scan --deep       Current directory + subdirectories
+  sapper-ai scan --system     AI system paths (~/.claude, ~/.cursor, ...)
+  sapper-ai scan ./path       Scan a specific file/directory
+  sapper-ai scan --fix        Quarantine blocked files
   sapper-ai init          Interactive setup wizard
   sapper-ai dashboard     Launch web dashboard
   sapper-ai --help        Show this help
@@ -52,13 +63,27 @@ Learn more: https://github.com/sapper-ai/sapperai
 `)
 }
 
-function parseScanArgs(argv: string[]): { targets: string[]; fix: boolean } | null {
+function parseScanArgs(
+  argv: string[]
+): { targets: string[]; fix: boolean; deep: boolean; system: boolean } | null {
   const targets: string[] = []
   let fix = false
+  let deep = false
+  let system = false
 
   for (const arg of argv) {
     if (arg === '--fix') {
       fix = true
+      continue
+    }
+
+    if (arg === '--deep') {
+      deep = true
+      continue
+    }
+
+    if (arg === '--system') {
+      system = true
       continue
     }
 
@@ -69,7 +94,82 @@ function parseScanArgs(argv: string[]): { targets: string[]; fix: boolean } | nu
     targets.push(arg)
   }
 
-  return { targets, fix }
+  return { targets, fix, deep, system }
+}
+
+function displayPath(path: string): string {
+  const home = homedir()
+  if (path === home) return '~'
+  return path.startsWith(home + '/') ? `~/${path.slice(home.length + 1)}` : path
+}
+
+async function promptScanScope(cwd: string): Promise<'shallow' | 'deep' | 'system'> {
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout })
+  const ask = (q: string): Promise<string> => new Promise((res) => rl.question(q, res))
+
+  try {
+    console.log('\n  SapperAI Security Scanner\n')
+    console.log('  ? Scan scope:')
+    console.log(`  ❯ 1) Current directory only     ${displayPath(cwd)}`)
+    console.log(`    2) Current + subdirectories   ${displayPath(join(cwd, '**'))}`)
+    console.log('    3) AI system scan              ~/.claude, ~/.cursor, ~/.vscode ...')
+    console.log()
+
+    const answer = await ask('  Choose [1-3] (default: 2): ')
+    const picked = Number.parseInt(answer.trim(), 10)
+    if (picked === 1) return 'shallow'
+    if (picked === 3) return 'system'
+    return 'deep'
+  } finally {
+    rl.close()
+  }
+}
+
+async function resolveScanOptions(args: {
+  targets: string[]
+  fix: boolean
+  deep: boolean
+  system: boolean
+}): Promise<ScanOptions | null> {
+  const cwd = process.cwd()
+
+  if (args.system) {
+    if (args.targets.length > 0) {
+      return null
+    }
+
+    return { system: true, fix: args.fix, scopeLabel: 'AI system scan' }
+  }
+
+  if (args.targets.length > 0) {
+    if (args.targets.length === 1 && args.targets[0] === '.' && !args.deep) {
+      return { targets: [cwd], deep: false, fix: args.fix, scopeLabel: 'Current directory only' }
+    }
+
+    return {
+      targets: args.targets,
+      deep: true,
+      fix: args.fix,
+      scopeLabel: args.targets.length === 1 && args.targets[0] === '.' ? 'Current + subdirectories' : 'Custom path',
+    }
+  }
+
+  if (args.deep) {
+    return { targets: [cwd], deep: true, fix: args.fix, scopeLabel: 'Current + subdirectories' }
+  }
+
+  if (process.stdout.isTTY !== true) {
+    return { targets: [cwd], deep: true, fix: args.fix, scopeLabel: 'Current + subdirectories' }
+  }
+
+  const scope = await promptScanScope(cwd)
+  if (scope === 'system') {
+    return { system: true, fix: args.fix, scopeLabel: 'AI system scan' }
+  }
+  if (scope === 'shallow') {
+    return { targets: [cwd], deep: false, fix: args.fix, scopeLabel: 'Current directory only' }
+  }
+  return { targets: [cwd], deep: true, fix: args.fix, scopeLabel: 'Current + subdirectories' }
 }
 
 async function runDashboard(): Promise<number> {
