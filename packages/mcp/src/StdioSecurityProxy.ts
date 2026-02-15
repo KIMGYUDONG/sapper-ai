@@ -440,11 +440,14 @@ export class StdioSecurityProxy {
       meta: {
         toolName,
         scanText: description,
+        scanSource: 'tool_description',
       },
     } as AssessmentContext
 
     try {
-      const decision = await this.scanner.scanTool(toolName, description, policy, detectors)
+      const decision = await this.scanner.scanTool(toolName, description, policy, detectors, {
+        scanSource: 'tool_description',
+      })
       this.logAuditEntry(scanContext, decision)
       return decision
     } catch (error) {

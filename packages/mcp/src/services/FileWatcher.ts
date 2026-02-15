@@ -200,7 +200,11 @@ export class FileWatcher {
           continue
         }
 
-        const decision = await this.scanner.scanTool(target.id, target.surface, effectivePolicy, this.resolveDetectors())
+        const decision = await this.scanner.scanTool(target.id, target.surface, effectivePolicy, this.resolveDetectors(), {
+          scanSource: 'watch_surface',
+          sourcePath: target.sourcePath,
+          sourceType: target.sourceType,
+        })
         this.logAuditEntry(target, decision)
 
         if (decision.action === 'block' && this.policy.mode === 'enforce') {
@@ -278,6 +282,7 @@ export class FileWatcher {
       policy: this.policy,
       meta: {
         phase,
+        scanSource: 'watch_surface',
         sourcePath: target.sourcePath,
         sourceType: target.sourceType,
       },

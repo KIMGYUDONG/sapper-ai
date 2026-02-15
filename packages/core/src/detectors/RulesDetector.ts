@@ -12,6 +12,8 @@ interface PatternMatch {
   label: string
   severity: PatternSeverity
   sample: string
+  matchText: string
+  context: string
 }
 
 const RULES: PatternRule[] = [
@@ -138,13 +140,13 @@ export class RulesDetector implements Detector {
 
   async run(ctx: AssessmentContext): Promise<DetectorOutput | null> {
     const textChunks = this.collectContextText(ctx)
-    const matches = this.matchPatterns(textChunks, ctx.kind)
+    const matches = this.matchPatterns(textChunks, ctx)
 
     if (matches.length === 0) {
       return null
     }
 
-    const risk = this.scoreRisk(matches)
+    const risk = this.scoreRisk(matches, ctx)
 
     return {
       detectorId: this.id,
@@ -205,17 +207,18 @@ export class RulesDetector implements Detector {
 
   private matchPatterns(
     textChunks: string[],
-    contextKind: AssessmentContext['kind']
+    ctx: AssessmentContext
   ): PatternMatch[] {
     const uniqueMatches = new Map<string, PatternMatch>()
 
     for (const text of textChunks) {
       for (const rule of RULES) {
-        if (!rule.regex.test(text)) {
+        const match = rule.regex.exec(text)
+        if (!match) {
           continue
         }
 
-        if (this.shouldSuppressMatch(rule.label, text, contextKind)) {
+        if (this.shouldSuppressMatch(rule.label, text, ctx)) {
           continue
         }
 
@@ -223,10 +226,16 @@ export class RulesDetector implements Detector {
           continue
         }
 
+        const matchText = String(match[0] ?? '')
+        const start = typeof match.index === 'number' ? match.index : 0
+        const end = start + matchText.length
+        const severity = this.resolveMatchSeverity(rule, matchText, ctx)
         uniqueMatches.set(rule.label, {
           label: rule.label,
-          severity: rule.severity,
+          severity,
           sample: text.slice(0, 200),
+          matchText: matchText.slice(0, 200),
+          context: this.buildMatchContext(text, start, end),
         })
       }
     }
@@ -234,12 +243,37 @@ export class RulesDetector implements Detector {
     return Array.from(uniqueMatches.values())
   }
 
+  private buildMatchContext(text: string, start: number, end: number): string {
+    const s = String(text ?? '')
+    const safeStart = Math.max(0, Math.min(s.length, Number.isFinite(start) ? start : 0))
+    const safeEnd = Math.max(safeStart, Math.min(s.length, Number.isFinite(end) ? end : safeStart))
+
+    const radius = 90
+    const from = Math.max(0, safeStart - radius)
+    const to = Math.min(s.length, safeEnd + radius)
+
+    const prefix = from > 0 ? '...' : ''
+    const suffix = to < s.length ? '...' : ''
+
+    return prefix + s.slice(from, to) + suffix
+  }
+
   private shouldSuppressMatch(
     label: string,
     text: string,
-    contextKind: AssessmentContext['kind']
+    ctx: AssessmentContext
   ): boolean {
-    if (contextKind === 'install_scan') {
+    if (ctx.kind === 'install_scan' && this.isInstallSurfaceScan(ctx) && label === 'path traversal') {
+      const deepinitParentMarker = /<!--\s*Parent:\s*\.\.\/AGENTS\.md\s*-->/i
+      if (deepinitParentMarker.test(text)) {
+        const withoutMarker = text.replace(deepinitParentMarker, '')
+        if (!/\.\.\//.test(withoutMarker)) {
+          return true
+        }
+      }
+    }
+
+    if (ctx.kind === 'install_scan' && !this.isInstallSurfaceScan(ctx)) {
       return false
     }
 
@@ -269,9 +303,15 @@ export class RulesDetector implements Detector {
     return false
   }
 
-  private scoreRisk(matches: PatternMatch[]): number {
+  private scoreRisk(matches: PatternMatch[], ctx: AssessmentContext): number {
     const highCount = matches.filter((match) => match.severity === 'high').length
     const mediumCount = matches.filter((match) => match.severity === 'medium').length
+
+    // Install-time scans of file/watch surfaces are often documentation-like; avoid
+    // escalating based on multiple medium patterns alone.
+    if (this.isInstallSurfaceScan(ctx) && highCount === 0) {
+      return mediumCount > 0 ? 0.6 : 0
+    }
 
     let baseRisk = 0
     if (highCount >= 2) {
@@ -286,5 +326,56 @@ export class RulesDetector implements Detector {
     const additionalRisk = extraCount * 0.05
 
     return Math.min(1, baseRisk + additionalRisk)
+  }
+
+  private isInstallSurfaceScan(ctx: AssessmentContext): boolean {
+    if (ctx.kind !== 'install_scan') {
+      return false
+    }
+
+    const meta = (ctx as AssessmentContext & { meta?: Record<string, unknown> }).meta
+    const scanSource = meta?.scanSource
+    if (scanSource !== 'file_surface' && scanSource !== 'watch_surface') {
+      return false
+    }
+
+    const sourcePath = meta?.sourcePath
+    const sourceType = meta?.sourceType
+    const isMarkdownLike =
+      (typeof sourcePath === 'string' && sourcePath.toLowerCase().endsWith('.md')) ||
+      sourceType === 'skill' ||
+      sourceType === 'agent'
+
+    return isMarkdownLike
+  }
+
+  private resolveMatchSeverity(rule: PatternRule, text: string, ctx: AssessmentContext): PatternSeverity {
+    if (!this.isInstallSurfaceScan(ctx)) {
+      return rule.severity
+    }
+
+    if (
+      rule.label === 'system prompt' ||
+      rule.label === 'system prompt (ko)' ||
+      rule.label === 'path traversal' ||
+      rule.label === 'command substitution' ||
+      rule.label === 'secret exfiltration' ||
+      rule.label === 'secret exfiltration (ko)' ||
+      rule.label === 'system override prefix' ||
+      rule.label === 'conversation history' ||
+      rule.label === 'unicode bypass'
+    ) {
+      return 'medium'
+    }
+
+    if (rule.label === 'template injection') {
+      if (/constructor\.constructor\(/i.test(text)) {
+        return 'high'
+      }
+
+      return 'medium'
+    }
+
+    return rule.severity
   }
 }

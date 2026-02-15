@@ -3,6 +3,8 @@ import {
   mkdir,
   readFile,
   rename,
+  rm,
+  stat,
   unlink,
   writeFile,
 } from 'node:fs/promises'
@@ -26,6 +28,10 @@ interface QuarantineIndex {
 
 interface QuarantineManagerOptions {
   quarantineDir?: string
+}
+
+interface RestoreOptions {
+  force?: boolean
 }
 
 const INDEX_FILE = 'index.json'
@@ -68,13 +74,27 @@ export class QuarantineManager {
     return record
   }
 
-  async restore(id: string): Promise<void> {
+  async restore(id: string, options: RestoreOptions = {}): Promise<void> {
     await this.ensureBaseDirs()
 
     const index = await this.readIndex()
     const record = index.records.find((entry) => entry.id === id)
     if (!record) {
       throw new Error(`Quarantine record not found for id=${id}`)
+    }
+
+    const force = options.force === true
+    const existing = await this.getExistingPathType(record.originalPath)
+    if (existing) {
+      if (!force) {
+        throw new Error(`Refusing to overwrite existing path at ${record.originalPath}. Use force to overwrite.`)
+      }
+      if (existing === 'directory') {
+        throw new Error(`Refusing to overwrite directory at ${record.originalPath}`)
+      }
+
+      // Remove the existing file/symlink to restore deterministically across platforms.
+      await rm(record.originalPath, { force: true })
     }
 
     await mkdir(dirname(record.originalPath), { recursive: true })
@@ -139,5 +159,16 @@ export class QuarantineManager {
     const stamp = Date.now().toString(36)
     const random = Math.random().toString(36).slice(2, 10)
     return `${stamp}-${random}`
+  }
+
+  private async getExistingPathType(targetPath: string): Promise<'file' | 'directory' | 'other' | null> {
+    try {
+      const info = await stat(targetPath)
+      if (info.isFile()) return 'file'
+      if (info.isDirectory()) return 'directory'
+      return 'other'
+    } catch {
+      return null
+    }
   }
 }

@@ -1,7 +1,6 @@
-import { existsSync } from 'node:fs'
 import { mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
-import { basename, join, resolve } from 'node:path'
+import { basename, join } from 'node:path'
 
 import {
   buildEntryName,
@@ -12,14 +11,17 @@ import {
   normalizeSurfaceText,
   PolicyManager,
   QuarantineManager,
+  resolvePolicyPath,
   Scanner,
 } from '@sapper-ai/core'
 import type { Decision, LlmConfig, Policy } from '@sapper-ai/types'
 
 import { presets } from './presets'
+import { findRepoRoot } from './utils/repoRoot'
 
 export interface ScanOptions {
   targets?: string[]
+  policyPath?: string
   fix?: boolean
   deep?: boolean
   system?: boolean
@@ -40,6 +42,7 @@ interface ScanFileResult {
   scanned: boolean
   decision?: Decision
   quarantinedId?: string
+  skipReason?: 'not_eligible' | 'empty_or_unreadable'
 }
 
 export interface ScanResult {
@@ -48,10 +51,16 @@ export interface ScanResult {
   scope: string
   target: string
   ai: boolean
+  filters: {
+    configLikeOnly: boolean
+  }
   summary: {
     totalFiles: number
+    eligibleFiles: number
     scannedFiles: number
     skippedFiles: number
+    skippedNotEligible: number
+    skippedEmptyOrUnreadable: number
     threats: number
   }
   findings: Array<{
@@ -64,10 +73,14 @@ export interface ScanResult {
     snippet: string
     detectors: string[]
     aiAnalysis: string | null
+    ruleMatches: Array<{
+      label: string
+      severity: 'high' | 'medium'
+      matchText: string
+      context: string
+    }>
   }>
 }
-
-const CONFIG_FILE_NAMES = ['sapperai.config.yaml', 'sapperai.config.yml']
 
 const GREEN = '\x1b[32m'
 const YELLOW = '\x1b[33m'
@@ -85,24 +98,21 @@ const SYSTEM_SCAN_PATHS = (() => {
   ]
 })()
 
-function findConfigFile(cwd: string): string | null {
-  for (const name of CONFIG_FILE_NAMES) {
-    const fullPath = resolve(cwd, name)
-    if (existsSync(fullPath)) {
-      return fullPath
-    }
+function resolvePolicy(cwd: string, options: { policyPath?: string }): Policy {
+  const manager = new PolicyManager()
+
+  const explicitPath = options.policyPath ?? process.env.SAPPERAI_POLICY_PATH
+  if (explicitPath) {
+    return manager.loadFromFile(explicitPath)
   }
 
-  return null
-}
-
-function resolvePolicy(cwd: string): Policy {
-  const configPath = findConfigFile(cwd)
-  if (!configPath) {
+  const repoRoot = findRepoRoot(cwd)
+  const resolved = resolvePolicyPath({ repoRoot, homeDir: homedir() })
+  if (!resolved) {
     return { ...presets.standard.policy }
   }
 
-  return new PolicyManager().loadFromFile(configPath)
+  return manager.loadFromFile(resolved.path)
 }
 
 function getThresholds(policy: Policy): { riskThreshold: number; blockMinConfidence: number } {
@@ -315,20 +325,25 @@ async function scanFile(
   quarantineManager: QuarantineManager
 ): Promise<ScanFileResult> {
   if (!isConfigLikeFile(filePath)) {
-    return { scanned: false }
+    return { scanned: false, skipReason: 'not_eligible' }
   }
 
   const raw = await readFileIfPresent(filePath)
   if (raw === null || raw.trim().length === 0) {
-    return { scanned: false }
+    return { scanned: false, skipReason: 'empty_or_unreadable' }
   }
 
   const fileSurface = normalizeSurfaceText(raw)
   const targetType = classifyTargetType(filePath)
-  const targets: Array<{ id: string; surface: string }> = [
+  const targets: Array<{ id: string; surface: string; meta: Record<string, unknown> }> = [
     {
       id: `${targetType}:${buildEntryName(filePath)}`,
       surface: fileSurface,
+      meta: {
+        scanSource: 'file_surface',
+        sourcePath: filePath,
+        sourceType: targetType,
+      },
     },
   ]
 
@@ -337,7 +352,15 @@ async function scanFile(
       const parsed = JSON.parse(raw) as unknown
       const mcpTargets = collectMcpTargetsFromJson(filePath, parsed)
       for (const t of mcpTargets) {
-        targets.push({ id: `${t.type}:${t.name}`, surface: t.surface })
+        targets.push({
+          id: `${t.type}:${t.name}`,
+          surface: t.surface,
+          meta: {
+            scanSource: 'file_surface',
+            sourcePath: t.source,
+            sourceType: t.type,
+          },
+        })
       }
     } catch {
     }
@@ -347,7 +370,7 @@ async function scanFile(
   let bestThreat: Decision | null = null
 
   for (const target of targets) {
-    const decision = await scanner.scanTool(target.id, target.surface, policy, detectors)
+    const decision = await scanner.scanTool(target.id, target.surface, policy, detectors, target.meta)
 
     if (!bestDecision || decision.risk > bestDecision.risk) {
       bestDecision = decision
@@ -396,6 +419,46 @@ function toDetectorsList(decision: Decision): string[] {
   return uniq(decision.evidence.map((e) => e.detectorId))
 }
 
+function extractRuleMatches(decision: Decision): Array<{
+  label: string
+  severity: 'high' | 'medium'
+  matchText: string
+  context: string
+}> {
+  const evidence = Array.isArray(decision.evidence) ? decision.evidence : []
+  const output = evidence.find((e) => e && e.detectorId === 'rules')
+  if (!output || !output.evidence || typeof output.evidence !== 'object') {
+    return []
+  }
+
+  const maybeMatches = (output.evidence as { matches?: unknown }).matches
+  if (!Array.isArray(maybeMatches)) {
+    return []
+  }
+
+  const results: Array<{ label: string; severity: 'high' | 'medium'; matchText: string; context: string }> = []
+  for (const m of maybeMatches) {
+    if (!m || typeof m !== 'object') continue
+    const match = m as { label?: unknown; severity?: unknown; matchText?: unknown; context?: unknown; sample?: unknown }
+
+    const label = typeof match.label === 'string' ? match.label : ''
+    const severity = match.severity === 'high' ? 'high' : 'medium'
+    const matchText = typeof match.matchText === 'string' ? match.matchText : ''
+    const context =
+      typeof match.context === 'string'
+        ? match.context
+        : typeof match.sample === 'string'
+          ? match.sample
+          : ''
+
+    if (!label || !matchText) continue
+    results.push({ label, severity, matchText, context })
+    if (results.length >= 24) break
+  }
+
+  return results
+}
+
 function truncateSnippet(text: string, maxChars: number): string {
   if (text.length <= maxChars) {
     return text
@@ -408,8 +471,11 @@ async function buildScanResult(params: {
   target: string
   ai: boolean
   totalFiles: number
+  eligibleFiles: number
   scannedFiles: number
   skippedFiles: number
+  skippedNotEligible: number
+  skippedEmptyOrUnreadable: number
   threats: number
   findings: ScanFinding[]
 }): Promise<ScanResult> {
@@ -423,6 +489,7 @@ async function buildScanResult(params: {
       const reasons = f.decision.reasons
       const patterns = extractPatternsFromReasons(reasons)
       const detectors = toDetectorsList(f.decision)
+      const ruleMatches = extractRuleMatches(f.decision)
 
       return {
         filePath: f.filePath,
@@ -434,6 +501,7 @@ async function buildScanResult(params: {
         snippet,
         detectors,
         aiAnalysis: f.aiAnalysis ?? null,
+        ruleMatches,
       }
     })
   )
@@ -444,10 +512,16 @@ async function buildScanResult(params: {
     scope: params.scope,
     target: params.target,
     ai: params.ai,
+    filters: {
+      configLikeOnly: true,
+    },
     summary: {
       totalFiles: params.totalFiles,
+      eligibleFiles: params.eligibleFiles,
       scannedFiles: params.scannedFiles,
       skippedFiles: params.skippedFiles,
+      skippedNotEligible: params.skippedNotEligible,
+      skippedEmptyOrUnreadable: params.skippedEmptyOrUnreadable,
       threats: params.threats,
     },
     findings,
@@ -456,7 +530,7 @@ async function buildScanResult(params: {
 
 export async function runScan(options: ScanOptions = {}): Promise<number> {
   const cwd = process.cwd()
-  const policy = resolvePolicy(cwd)
+  const policy = resolvePolicy(cwd, { policyPath: options.policyPath })
   const fix = options.fix === true
 
   const aiEnabled = options.ai === true
@@ -508,6 +582,8 @@ export async function runScan(options: ScanOptions = {}): Promise<number> {
 
   const files = Array.from(fileSet).sort()
   console.log(`  Collecting files...  ${files.length} files found`)
+  const eligibleByName = files.filter((f) => isConfigLikeFile(f)).length
+  console.log(`  Filter: config-like only (${eligibleByName} eligible / ${files.length} total)`)
   console.log()
 
   if (aiEnabled) {
@@ -517,6 +593,9 @@ export async function runScan(options: ScanOptions = {}): Promise<number> {
 
   const scannedFindings: ScanFinding[] = []
   let scannedFiles = 0
+  let eligibleFiles = 0
+  let skippedNotEligible = 0
+  let skippedEmptyOrUnreadable = 0
 
   const total = files.length
   const progressWidth = Math.max(10, Math.min(30, (process.stdout.columns ?? 80) - 30))
@@ -538,6 +617,19 @@ export async function runScan(options: ScanOptions = {}): Promise<number> {
     }
 
     const result = await scanFile(filePath, policy, scanner, detectors, fix, quarantineManager)
+
+    if (result.skipReason === 'not_eligible') {
+      skippedNotEligible += 1
+      continue
+    }
+
+    eligibleFiles += 1
+
+    if (result.skipReason === 'empty_or_unreadable') {
+      skippedEmptyOrUnreadable += 1
+      continue
+    }
+
     if (result.scanned && result.decision) {
       scannedFiles += 1
       scannedFindings.push({ filePath, decision: result.decision, quarantinedId: result.quarantinedId })
@@ -591,7 +683,11 @@ export async function runScan(options: ScanOptions = {}): Promise<number> {
           const surface = normalizeSurfaceText(raw)
           const targetType = classifyTargetType(finding.filePath)
           const id = `${targetType}:${buildEntryName(finding.filePath)}`
-          const aiDecision = await scanner.scanTool(id, surface, aiPolicy, aiDetectors)
+          const aiDecision = await scanner.scanTool(id, surface, aiPolicy, aiDetectors, {
+            scanSource: 'file_surface',
+            sourcePath: finding.filePath,
+            sourceType: targetType,
+          })
 
           const mergedReasons = uniq([...finding.decision.reasons, ...aiDecision.reasons])
           const existingEvidence = finding.decision.evidence
@@ -631,7 +727,7 @@ export async function runScan(options: ScanOptions = {}): Promise<number> {
     }
   }
 
-  const skippedFiles = total - scannedFiles
+  const skippedFiles = skippedNotEligible + skippedEmptyOrUnreadable
   const threats = scannedFindings.filter((f) => isThreat(f.decision, policy))
 
   const scanResult = await buildScanResult({
@@ -639,8 +735,11 @@ export async function runScan(options: ScanOptions = {}): Promise<number> {
     target: targets.join(', '),
     ai: aiEnabled,
     totalFiles: total,
+    eligibleFiles,
     scannedFiles,
     skippedFiles,
+    skippedNotEligible,
+    skippedEmptyOrUnreadable,
     threats: threats.length,
     findings: scannedFindings,
   })
@@ -678,11 +777,11 @@ export async function runScan(options: ScanOptions = {}): Promise<number> {
   }
 
   if (threats.length === 0) {
-    const msg = `  ✓ All clear — ${scannedFiles} files scanned, 0 threats detected`
+    const msg = `  ✓ All clear — ${scannedFiles}/${eligibleFiles} eligible files scanned, 0 threats detected (${total} total files)`
     console.log(color ? `${GREEN}${msg}${RESET}` : msg)
     console.log()
   } else {
-    const warn = `  ⚠ ${scannedFiles} files scanned, ${threats.length} threats detected`
+    const warn = `  ⚠ ${scannedFiles}/${eligibleFiles} eligible files scanned, ${threats.length} threats detected (${total} total files)`
     console.log(color ? `${RED}${warn}${RESET}` : warn)
     console.log()
 

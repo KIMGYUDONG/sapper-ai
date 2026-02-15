@@ -1,5 +1,11 @@
 # @sapper-ai/core
 
+## 0.2.2
+
+### Patch Changes
+
+- fix(core): safer quarantine restore (refuse overwrite unless forced) + export policy resolver
+
 ## 0.2.1
 
 ### Patch Changes

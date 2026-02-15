@@ -9,7 +9,12 @@ import * as readline from 'node:readline'
 import select from '@inquirer/select'
 
 import { presets, type PresetName } from './presets'
+import { renderPolicyYaml } from './policyYaml'
+import { getHardenPlanSummary, runHarden } from './harden'
+import { runQuarantineList, runQuarantineRestore } from './quarantine'
+import { unwrapMcpConfigFile, wrapMcpConfigFile, checkNpxAvailable, resolveInstalledPackageVersion } from './mcp/wrapConfig'
 import { runScan, type ScanOptions } from './scan'
+import { isCiEnv } from './utils/env'
 
 export async function runCli(argv: string[] = process.argv.slice(2)): Promise<number> {
   if (argv[0] === '--help' || argv[0] === '-h') {
@@ -30,7 +35,61 @@ export async function runCli(argv: string[] = process.argv.slice(2)): Promise<nu
       return 1
     }
 
-    return runScan(scanOptions)
+    const scanExitCode = await runScan(scanOptions)
+
+    const shouldOfferHarden =
+      parsed.noPrompt !== true &&
+      process.stdout.isTTY === true &&
+      process.stdin.isTTY === true &&
+      isCiEnv(process.env) !== true &&
+      (parsed.harden === true || (await getHardenPlanSummary({ includeSystem: true })).actions.length > 0)
+
+    if (shouldOfferHarden) {
+      const hardenExitCode = await runHarden({
+        apply: true,
+        includeSystem: true,
+      })
+
+      if (scanExitCode === 0 && hardenExitCode !== 0) {
+        return hardenExitCode
+      }
+    }
+
+    return scanExitCode
+  }
+
+  if (argv[0] === 'harden') {
+    const parsed = parseHardenArgs(argv.slice(1))
+    if (!parsed) {
+      printUsage()
+      return 1
+    }
+
+    return runHarden(parsed)
+  }
+
+  if (argv[0] === 'mcp') {
+    const parsed = parseMcpArgs(argv.slice(1))
+    if (!parsed) {
+      printUsage()
+      return 1
+    }
+
+    return runMcpCommand(parsed)
+  }
+
+  if (argv[0] === 'quarantine') {
+    const parsed = parseQuarantineArgs(argv.slice(1))
+    if (!parsed) {
+      printUsage()
+      return 1
+    }
+
+    if (parsed.command === 'quarantine_list') {
+      return runQuarantineList({ quarantineDir: parsed.quarantineDir })
+    }
+
+    return runQuarantineRestore({ id: parsed.id, quarantineDir: parsed.quarantineDir, force: parsed.force })
   }
 
   if (argv[0] === 'dashboard') {
@@ -56,10 +115,20 @@ Usage:
   sapper-ai scan --deep       Current directory + subdirectories
   sapper-ai scan --system     AI system paths (~/.claude, ~/.cursor, ...)
   sapper-ai scan ./path       Scan a specific file/directory
+  sapper-ai scan --policy ./sapperai.config.yaml  Use explicit policy path (fatal if invalid)
   sapper-ai scan --fix        Quarantine blocked files
   sapper-ai scan --ai         Deep scan with AI analysis (requires OPENAI_API_KEY)
+  sapper-ai scan --no-prompt  Disable all prompts (CI-safe)
+  sapper-ai scan --harden     After scan, offer to apply recommended hardening
   sapper-ai scan --no-open    Skip opening report in browser
   sapper-ai scan --no-save    Skip saving scan results to ~/.sapperai/scans/
+  sapper-ai harden            Plan recommended setup changes (no writes)
+  sapper-ai harden --apply    Apply recommended project changes
+  sapper-ai harden --include-system   Include system changes (home directory)
+  sapper-ai mcp wrap-config   Wrap MCP servers to run behind sapperai-proxy (defaults to Claude Code config)
+  sapper-ai mcp unwrap-config Undo MCP wrapping
+  sapper-ai quarantine list   List quarantined files
+  sapper-ai quarantine restore <id> [--force]  Restore quarantined file by id
   sapper-ai init          Interactive setup wizard
   sapper-ai dashboard     Launch web dashboard
   sapper-ai --help        Show this help
@@ -72,24 +141,42 @@ function parseScanArgs(
   argv: string[]
 ): {
   targets: string[]
+  policyPath?: string
   fix: boolean
   deep: boolean
   system: boolean
   ai: boolean
   noSave: boolean
   noOpen: boolean
+  noPrompt: boolean
+  harden: boolean
 } | null {
   const targets: string[] = []
+  let policyPath: string | undefined
   let fix = false
   let deep = false
   let system = false
   let ai = false
   let noSave = false
   let noOpen = false
+  let noPrompt = false
+  let harden = false
 
-  for (const arg of argv) {
+  for (let index = 0; index < argv.length; index += 1) {
+    const arg = argv[index]!
+    const nextArg = argv[index + 1]
+
     if (arg === '--fix') {
       fix = true
+      continue
+    }
+
+    if (arg === '--policy') {
+      if (!nextArg || nextArg.startsWith('-')) {
+        return null
+      }
+      policyPath = nextArg
+      index += 1
       continue
     }
 
@@ -105,6 +192,16 @@ function parseScanArgs(
 
     if (arg === '--ai') {
       ai = true
+      continue
+    }
+
+    if (arg === '--no-prompt') {
+      noPrompt = true
+      continue
+    }
+
+    if (arg === '--harden') {
+      harden = true
       continue
     }
 
@@ -125,7 +222,287 @@ function parseScanArgs(
     targets.push(arg)
   }
 
-  return { targets, fix, deep, system, ai, noSave, noOpen }
+  return { targets, policyPath, fix, deep, system, ai, noSave, noOpen, noPrompt, harden }
+}
+
+function parseHardenArgs(
+  argv: string[]
+): {
+  apply?: boolean
+  includeSystem?: boolean
+  yes?: boolean
+  noPrompt?: boolean
+  force?: boolean
+  workflowVersion?: string
+  mcpVersion?: string
+} | null {
+  let apply = false
+  let includeSystem = false
+  let yes = false
+  let noPrompt = false
+  let force = false
+  let workflowVersion: string | undefined
+  let mcpVersion: string | undefined
+
+  for (let index = 0; index < argv.length; index += 1) {
+    const arg = argv[index]!
+    const nextArg = argv[index + 1]
+
+    if (arg === '--dry-run') {
+      apply = false
+      continue
+    }
+
+    if (arg === '--apply') {
+      apply = true
+      continue
+    }
+
+    if (arg === '--include-system') {
+      includeSystem = true
+      continue
+    }
+
+    if (arg === '--yes') {
+      yes = true
+      continue
+    }
+
+    if (arg === '--no-prompt') {
+      noPrompt = true
+      continue
+    }
+
+    if (arg === '--force') {
+      force = true
+      continue
+    }
+
+    if (arg === '--workflow-version') {
+      if (!nextArg || nextArg.startsWith('-')) return null
+      workflowVersion = nextArg
+      index += 1
+      continue
+    }
+
+    if (arg === '--mcp-version') {
+      if (!nextArg || nextArg.startsWith('-')) return null
+      mcpVersion = nextArg
+      index += 1
+      continue
+    }
+
+    return null
+  }
+
+  return {
+    apply,
+    includeSystem,
+    yes,
+    noPrompt,
+    force,
+    workflowVersion,
+    mcpVersion,
+  }
+}
+
+type McpCommandArgs =
+  | {
+      command: 'mcp_wrap_config'
+      configPath: string
+      format: 'json' | 'jsonc'
+      dryRun: boolean
+      mcpVersion?: string
+    }
+  | {
+      command: 'mcp_unwrap_config'
+      configPath: string
+      format: 'json' | 'jsonc'
+      dryRun: boolean
+    }
+
+function parseMcpArgs(argv: string[]): McpCommandArgs | null {
+  const subcommand = argv[0]
+  const rest = argv.slice(1)
+  if (!subcommand) return null
+
+  const defaultConfigPath = join(homedir(), '.config', 'claude-code', 'config.json')
+
+  let configPath = defaultConfigPath
+  let format: 'json' | 'jsonc' = 'jsonc'
+  let dryRun = false
+  let mcpVersion: string | undefined
+
+  for (let index = 0; index < rest.length; index += 1) {
+    const arg = rest[index]!
+    const nextArg = rest[index + 1]
+
+    if (arg === '--config') {
+      if (!nextArg || nextArg.startsWith('-')) return null
+      configPath = nextArg
+      format = 'json'
+      index += 1
+      continue
+    }
+
+    if (arg === '--jsonc') {
+      format = 'jsonc'
+      continue
+    }
+
+    if (arg === '--dry-run') {
+      dryRun = true
+      continue
+    }
+
+    if (arg === '--mcp-version') {
+      if (!nextArg || nextArg.startsWith('-')) return null
+      mcpVersion = nextArg
+      index += 1
+      continue
+    }
+
+    return null
+  }
+
+  if (subcommand === 'wrap-config') {
+    return { command: 'mcp_wrap_config', configPath, format, dryRun, mcpVersion }
+  }
+
+  if (subcommand === 'unwrap-config') {
+    return { command: 'mcp_unwrap_config', configPath, format, dryRun }
+  }
+
+  return null
+}
+
+async function runMcpCommand(args: McpCommandArgs): Promise<number> {
+  if (args.command === 'mcp_unwrap_config') {
+    const result = await unwrapMcpConfigFile({
+      filePath: args.configPath,
+      format: args.format,
+      dryRun: args.dryRun,
+    })
+
+    if (!result.changed) {
+      console.log('No changes needed.')
+      return 0
+    }
+
+    if (result.restoredFromBackupPath) {
+      if (args.dryRun) {
+        console.log(`Config parse failed; would restore from backup: ${result.restoredFromBackupPath}`)
+        return 0
+      }
+
+      console.log(`Config parse failed; restored from backup: ${result.restoredFromBackupPath}`)
+      if (result.backupPath) console.log(`Backup: ${result.backupPath}`)
+      return 0
+    }
+
+    if (args.dryRun) {
+      console.log(`Would unwrap ${result.changedServers.length} server(s): ${result.changedServers.join(', ')}`)
+      return 0
+    }
+
+    console.log(`Unwrapped ${result.changedServers.length} server(s): ${result.changedServers.join(', ')}`)
+    if (result.backupPath) console.log(`Backup: ${result.backupPath}`)
+    return 0
+  }
+
+  if (!checkNpxAvailable()) {
+    console.error("npx is not available on PATH. Install Node.js/npm and retry.")
+    return 1
+  }
+
+  const envVersion = process.env.SAPPERAI_MCP_VERSION?.trim()
+  const installedVersion = resolveInstalledPackageVersion('@sapper-ai/mcp')
+  const mcpVersion = (args.mcpVersion ?? envVersion ?? installedVersion ?? '').trim()
+  if (!mcpVersion) {
+    console.error("Missing MCP version. Provide '--mcp-version <semver>' or install @sapper-ai/mcp.")
+    return 1
+  }
+
+  const result = await wrapMcpConfigFile({
+    filePath: args.configPath,
+    mcpVersion,
+    format: args.format,
+    dryRun: args.dryRun,
+  })
+
+  if (!result.changed) {
+    console.log('No changes needed.')
+    return 0
+  }
+
+  if (args.dryRun) {
+    console.log(`Would wrap ${result.changedServers.length} server(s): ${result.changedServers.join(', ')}`)
+    return 0
+  }
+
+  console.log(`Wrapped ${result.changedServers.length} server(s): ${result.changedServers.join(', ')}`)
+  if (result.backupPath) console.log(`Backup: ${result.backupPath}`)
+  return 0
+}
+
+type QuarantineCommandArgs =
+  | { command: 'quarantine_list'; quarantineDir?: string }
+  | { command: 'quarantine_restore'; quarantineDir?: string; id: string; force: boolean }
+
+function parseQuarantineArgs(argv: string[]): QuarantineCommandArgs | null {
+  const subcommand = argv[0]
+  const rest = argv.slice(1)
+  if (!subcommand) return null
+
+  let quarantineDir: string | undefined
+  let force = false
+
+  if (subcommand === 'list') {
+    for (let index = 0; index < rest.length; index += 1) {
+      const arg = rest[index]!
+      const nextArg = rest[index + 1]
+
+      if (arg === '--quarantine-dir') {
+        if (!nextArg || nextArg.startsWith('-')) return null
+        quarantineDir = nextArg
+        index += 1
+        continue
+      }
+
+      return null
+    }
+
+    return { command: 'quarantine_list', quarantineDir }
+  }
+
+  if (subcommand === 'restore') {
+    const id = rest[0]
+    if (!id) return null
+    const tail = rest.slice(1)
+
+    for (let index = 0; index < tail.length; index += 1) {
+      const arg = tail[index]!
+      const nextArg = tail[index + 1]
+
+      if (arg === '--force') {
+        force = true
+        continue
+      }
+
+      if (arg === '--quarantine-dir') {
+        if (!nextArg || nextArg.startsWith('-')) return null
+        quarantineDir = nextArg
+        index += 1
+        continue
+      }
+
+      return null
+    }
+
+    return { command: 'quarantine_restore', id, quarantineDir, force }
+  }
+
+  return null
 }
 
 function displayPath(path: string): string {
@@ -167,12 +544,15 @@ async function promptScanDepth(): Promise<boolean> {
 
 async function resolveScanOptions(args: {
   targets: string[]
+  policyPath?: string
   fix: boolean
   deep: boolean
   system: boolean
   ai: boolean
   noSave: boolean
   noOpen: boolean
+  noPrompt: boolean
+  harden: boolean
 }): Promise<ScanOptions | null> {
   const cwd = process.cwd()
 
@@ -180,6 +560,7 @@ async function resolveScanOptions(args: {
     fix: args.fix,
     noSave: args.noSave,
     noOpen: args.noOpen,
+    policyPath: args.policyPath,
   }
 
   if (args.system) {
@@ -214,8 +595,8 @@ async function resolveScanOptions(args: {
     return { ...common, targets: [cwd], deep: true, ai: args.ai, scopeLabel: 'Current + subdirectories' }
   }
 
-  if (process.stdout.isTTY !== true) {
-    return { ...common, targets: [cwd], deep: true, ai: false, scopeLabel: 'Current + subdirectories' }
+  if (args.noPrompt === true || process.stdout.isTTY !== true) {
+    return { ...common, targets: [cwd], deep: true, ai: args.ai, scopeLabel: 'Current + subdirectories' }
   }
 
   const scope = await promptScanScope(cwd)
@@ -316,10 +697,10 @@ async function runInitWizard(): Promise<void> {
     '# Generated by: sapper-ai init',
     '# Docs: https://github.com/sapper-ai/sapperai',
     '',
-    ...buildPolicyYaml(selectedPreset, auditLogPath),
   ]
 
-  writeFileSync(outputPath, `${lines.join('\n')}\n`, 'utf8')
+  const body = renderPolicyYaml(selectedPreset, auditLogPath)
+  writeFileSync(outputPath, `${lines.join('\n')}\n${body}`, 'utf8')
 
   console.log(`\n  Created ${outputPath}\n`)
   console.log('  Quick start:\n')
@@ -329,35 +710,6 @@ async function runInitWizard(): Promise<void> {
   console.log()
 
   rl.close()
-}
-
-function buildPolicyYaml(preset: PresetName, auditLogPath?: string): string[] {
-  const p = presets[preset].policy
-  const lines: string[] = []
-
-  lines.push(`mode: ${p.mode}`)
-  lines.push(`defaultAction: ${p.defaultAction}`)
-  lines.push(`failOpen: ${p.failOpen}`)
-  lines.push('')
-  lines.push('detectors:')
-
-  const detectors = p.detectors ?? ['rules']
-  for (const d of detectors) {
-    lines.push(`  - ${d}`)
-  }
-
-  lines.push('')
-  lines.push('thresholds:')
-  const thresholds = p.thresholds ?? {}
-  lines.push(`  riskThreshold: ${thresholds.riskThreshold ?? 0.7}`)
-  lines.push(`  blockMinConfidence: ${thresholds.blockMinConfidence ?? 0.5}`)
-
-  if (auditLogPath) {
-    lines.push('')
-    lines.push(`auditLogPath: ${auditLogPath}`)
-  }
-
-  return lines
 }
 
 function isDirectExecution(argv: string[]): boolean {

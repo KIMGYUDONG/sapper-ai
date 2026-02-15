@@ -1,4 +1,3 @@
-import { createServer } from 'node:http'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -25,14 +24,8 @@ const policy: Policy = {
 
 describe('blocklist commands', () => {
   const tempDirs: string[] = []
-  const servers: Array<{ close: () => void }> = []
 
   afterEach(() => {
-    for (const server of servers) {
-      server.close()
-    }
-    servers.length = 0
-
     for (const dir of tempDirs) {
       rmSync(dir, { recursive: true, force: true })
     }
@@ -43,10 +36,13 @@ describe('blocklist commands', () => {
     tempDirs.push(rootDir)
     const cachePath = join(rootDir, 'intel.json')
 
-    const server = createServer((req, res) => {
-      if (req.url === '/feed') {
-        res.setHeader('content-type', 'application/json')
-        res.end(
+    const source = 'https://threat-feed.test/feed'
+    const fetchImpl: typeof fetch = async (input) => {
+      const url =
+        typeof input === 'string' ? input : input instanceof URL ? input.toString() : (input as Request).url
+
+      if (url === source) {
+        return new Response(
           JSON.stringify({
             entries: [
               {
@@ -57,32 +53,20 @@ describe('blocklist commands', () => {
                 severity: 'critical',
               },
             ],
-          })
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } }
         )
-        return
       }
 
-      res.statusCode = 404
-      res.end('not found')
-    })
-
-    await new Promise<void>((resolve) => {
-      server.listen(0, () => resolve())
-    })
-    servers.push(server)
-
-    const address = server.address()
-    if (!address || typeof address === 'string') {
-      throw new Error('Expected numeric address')
+      return new Response('not found', { status: 404 })
     }
-
-    const source = `http://127.0.0.1:${address.port}/feed`
 
     const syncOutputs: string[] = []
     await runBlocklistSyncCommand({
       policy,
       sources: [source],
       cachePath,
+      fetchImpl,
       write: (text) => syncOutputs.push(text),
     })
     const syncPayload = JSON.parse(syncOutputs.join('')) as { acceptedEntries: number }

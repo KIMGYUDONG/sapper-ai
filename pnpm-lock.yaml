@@ -172,7 +172,7 @@ importers:
         specifier: workspace:*
         version: link:../core
       '@sapper-ai/mcp':
-        specifier: workspace:^
+        specifier: workspace:*
         version: link:../mcp
       '@sapper-ai/openai':
         specifier: workspace:^

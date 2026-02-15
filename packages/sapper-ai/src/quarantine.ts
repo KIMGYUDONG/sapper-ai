@@ -1,18 +1,18 @@
 import { QuarantineManager } from '@sapper-ai/core'
 
-interface QuarantineListCommandOptions {
+export interface QuarantineListOptions {
   quarantineDir?: string
   write?: (text: string) => void
 }
 
-interface QuarantineRestoreCommandOptions {
+export interface QuarantineRestoreOptions {
   id: string
   quarantineDir?: string
   force?: boolean
   write?: (text: string) => void
 }
 
-export async function runQuarantineListCommand(options: QuarantineListCommandOptions): Promise<void> {
+export async function runQuarantineList(options: QuarantineListOptions = {}): Promise<number> {
   const manager = new QuarantineManager({ quarantineDir: options.quarantineDir })
   const records = await manager.list()
   const write = options.write ?? ((text: string) => process.stdout.write(text))
@@ -27,12 +27,16 @@ export async function runQuarantineListCommand(options: QuarantineListCommandOpt
       2
     )}\n`
   )
+
+  return 0
 }
 
-export async function runQuarantineRestoreCommand(options: QuarantineRestoreCommandOptions): Promise<void> {
+export async function runQuarantineRestore(options: QuarantineRestoreOptions): Promise<number> {
   const manager = new QuarantineManager({ quarantineDir: options.quarantineDir })
   await manager.restore(options.id, { force: options.force === true })
 
   const write = options.write ?? ((text: string) => process.stdout.write(text))
   write(`Restored quarantine record: ${options.id}\n`)
+  return 0
 }
+

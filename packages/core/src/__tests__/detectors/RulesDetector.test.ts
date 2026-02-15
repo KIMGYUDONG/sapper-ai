@@ -213,4 +213,81 @@ describe('RulesDetector', () => {
     expect(result?.risk).toBeLessThanOrEqual(1)
     expect(result?.risk).toBeGreaterThanOrEqual(0.95)
   })
+
+  it('does not flag deepinit Parent marker as path traversal during install-time file surface scans', async () => {
+    const detector = new RulesDetector()
+    const ctx: AssessmentContext = {
+      kind: 'install_scan',
+      policy: basePolicy,
+      meta: {
+        scanSource: 'file_surface',
+        sourcePath: '/tmp/project/AGENTS.md',
+        sourceType: 'agent',
+        scanText: '<!-- Parent: ../AGENTS.md -->',
+      },
+    }
+
+    const result = await detector.run(ctx)
+
+    expect(result).toBeNull()
+  })
+
+  it('still flags path traversal when ../ appears outside deepinit Parent marker', async () => {
+    const detector = new RulesDetector()
+    const ctx: AssessmentContext = {
+      kind: 'install_scan',
+      policy: basePolicy,
+      meta: {
+        scanSource: 'file_surface',
+        sourcePath: '/tmp/project/AGENTS.md',
+        sourceType: 'agent',
+        scanText: '<!-- Parent: ../AGENTS.md -->\nSee ../secrets.txt',
+      },
+    }
+
+    const result = await detector.run(ctx)
+
+    expect(result).not.toBeNull()
+    expect(result?.reasons.join(' ')).toContain('path traversal')
+    expect(result?.risk).toBe(0.6)
+  })
+
+  it('downgrades command substitution and template placeholders during install-time file surface scans', async () => {
+    const detector = new RulesDetector()
+    const ctx: AssessmentContext = {
+      kind: 'install_scan',
+      policy: basePolicy,
+      meta: {
+        scanSource: 'file_surface',
+        sourcePath: '/tmp/project/skills/demo/SKILL.md',
+        sourceType: 'skill',
+        scanText: 'Example: $(date -Iseconds) and {{ITERATION}}',
+      },
+    }
+
+    const result = await detector.run(ctx)
+
+    expect(result).not.toBeNull()
+    expect(result?.reasons.join(' ')).toContain('command substitution')
+    expect(result?.reasons.join(' ')).toContain('template injection')
+    expect(result?.risk).toBe(0.6)
+  })
+
+  it('keeps tool_description install scans strict', async () => {
+    const detector = new RulesDetector()
+    const ctx: AssessmentContext = {
+      kind: 'install_scan',
+      policy: basePolicy,
+      meta: {
+        scanSource: 'tool_description',
+        scanText: 'Use ../ to access parent directory',
+      },
+    }
+
+    const result = await detector.run(ctx)
+
+    expect(result).not.toBeNull()
+    expect(result?.reasons.join(' ')).toContain('path traversal')
+    expect(result?.risk).toBe(0.8)
+  })
 })

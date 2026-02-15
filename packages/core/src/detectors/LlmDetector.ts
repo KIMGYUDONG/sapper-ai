@@ -63,10 +63,23 @@ export class LlmDetector implements Detector {
   }
 
   private formatPrompt(ctx: AssessmentContext): string {
+    const meta = (ctx as AssessmentContext & { meta?: Record<string, unknown> }).meta
+    const scanText = typeof meta?.scanText === 'string' ? meta.scanText : undefined
+    const toolNameFromMeta = typeof meta?.toolName === 'string' ? meta.toolName : undefined
+    const scanSource = typeof meta?.scanSource === 'string' ? meta.scanSource : undefined
+    const sourcePath = typeof meta?.sourcePath === 'string' ? meta.sourcePath : undefined
+    const sourceType = typeof meta?.sourceType === 'string' ? meta.sourceType : undefined
+
     const safeContext = {
+      kind: ctx.kind,
+      toolName: ctx.toolCall?.toolName ?? toolNameFromMeta,
+      scanSource,
+      sourcePath,
+      sourceType,
+      priorRisk: this.extractPriorRisk(ctx),
       toolCall: ctx.toolCall,
       toolResult: ctx.toolResult,
-      kind: ctx.kind,
+      scanText,
     }
     const serialized = JSON.stringify(safeContext)
 
@@ -80,7 +93,7 @@ export class LlmDetector implements Detector {
 
     if (this.config.provider === 'openai') {
       const endpoint = this.config.endpoint ?? 'https://api.openai.com/v1/responses'
-      const response = await fetch(endpoint, {
+      return this.fetchJsonWithRetry(endpoint, {
         method: 'POST',
         headers: {
           'content-type': 'application/json',
@@ -90,18 +103,12 @@ export class LlmDetector implements Detector {
           model: this.config.model ?? 'gpt-4.1-mini',
           input: prompt,
         }),
-      })
-
-      if (!response.ok) {
-        throw new Error(`OpenAI request failed with status ${response.status}`)
-      }
-
-      return response.json()
+      }, 'OpenAI')
     }
 
     if (this.config.provider === 'anthropic') {
       const endpoint = this.config.endpoint ?? 'https://api.anthropic.com/v1/messages'
-      const response = await fetch(endpoint, {
+      return this.fetchJsonWithRetry(endpoint, {
         method: 'POST',
         headers: {
           'content-type': 'application/json',
@@ -113,17 +120,11 @@ export class LlmDetector implements Detector {
           max_tokens: 400,
           messages: [{ role: 'user', content: prompt }],
         }),
-      })
-
-      if (!response.ok) {
-        throw new Error(`Anthropic request failed with status ${response.status}`)
-      }
-
-      return response.json()
+      }, 'Anthropic')
     }
 
     const endpoint = this.config.endpoint ?? 'https://api.sapperai.com/v1/detect'
-    const response = await fetch(endpoint, {
+    return this.fetchJsonWithRetry(endpoint, {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
@@ -133,13 +134,55 @@ export class LlmDetector implements Detector {
         model: this.config.model,
         prompt,
       }),
-    })
+    }, 'SapperAI')
+  }
 
-    if (!response.ok) {
-      throw new Error(`SapperAI request failed with status ${response.status}`)
+  private async fetchJsonWithRetry(endpoint: string, init: RequestInit, providerLabel: string): Promise<unknown> {
+    const maxAttempts = 3
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      const response = await fetch(endpoint, init)
+
+      if (response.ok) {
+        return response.json()
+      }
+
+      if (attempt >= maxAttempts || !this.isRetryableStatus(response.status)) {
+        throw new Error(`${providerLabel} request failed with status ${response.status}`)
+      }
+
+      const delayMs = this.getRetryDelayMs(response, attempt)
+      if (delayMs > 0) {
+        await this.sleep(delayMs)
+      }
     }
 
-    return response.json()
+    throw new Error(`${providerLabel} request failed`)
+  }
+
+  private isRetryableStatus(status: number): boolean {
+    return status === 429 || status === 503 || status === 504
+  }
+
+  private getRetryDelayMs(response: Response, attempt: number): number {
+    const retryAfter = response.headers.get('retry-after')
+    if (retryAfter) {
+      const seconds = Number(retryAfter)
+      if (Number.isFinite(seconds) && seconds >= 0) {
+        return Math.min(60_000, seconds * 1000)
+      }
+    }
+
+    const baseMs = 250
+    const maxMs = 10_000
+    const exponential = Math.min(maxMs, baseMs * Math.pow(2, attempt - 1))
+    const jitter = Math.floor(Math.random() * 100)
+
+    return exponential + jitter
+  }
+
+  private async sleep(ms: number): Promise<void> {
+    await new Promise<void>((resolve) => setTimeout(resolve, ms))
   }
 
   private parseResponse(response: unknown): ParsedLlmResult {

@@ -1,4 +1,3 @@
-import { createServer } from 'node:http'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -9,15 +8,8 @@ import { ThreatIntelStore, buildMatchListFromIntel } from '../../intel/ThreatInt
 
 describe('ThreatIntelStore', () => {
   const tempDirs: string[] = []
-  const servers: Array<{ close: () => void }> = []
 
   afterEach(() => {
-    for (const server of servers) {
-      server.close()
-    }
-
-    servers.length = 0
-
     for (const dir of tempDirs) {
       rmSync(dir, { recursive: true, force: true })
     }
@@ -27,10 +19,13 @@ describe('ThreatIntelStore', () => {
     const root = mkdtempSync(join(tmpdir(), 'intel-store-'))
     tempDirs.push(root)
 
-    const server = createServer((req, res) => {
-      if (req.url === '/feed') {
-        res.setHeader('content-type', 'application/json')
-        res.end(
+    const feedUrl = 'https://threat-feed.test/feed'
+    const fetchImpl: typeof fetch = async (input) => {
+      const url =
+        typeof input === 'string' ? input : input instanceof URL ? input.toString() : (input as Request).url
+
+      if (url === feedUrl) {
+        return new Response(
           JSON.stringify({
             entries: [
               {
@@ -45,28 +40,17 @@ describe('ThreatIntelStore', () => {
                 value: 'evil\\.example',
               },
             ],
-          })
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } }
         )
-        return
       }
 
-      res.statusCode = 404
-      res.end('not found')
-    })
-
-    await new Promise<void>((resolve) => {
-      server.listen(0, () => resolve())
-    })
-    servers.push(server)
-
-    const address = server.address()
-    if (!address || typeof address === 'string') {
-      throw new Error('Server did not provide numeric port')
+      return new Response('not found', { status: 404 })
     }
 
-    const feedUrl = `http://127.0.0.1:${address.port}/feed`
     const store = new ThreatIntelStore({
       cachePath: join(root, 'intel.json'),
+      fetchImpl,
     })
 
     const syncResult = await store.syncFromSources([feedUrl])
@@ -85,8 +69,34 @@ describe('ThreatIntelStore', () => {
     const root = mkdtempSync(join(tmpdir(), 'intel-merge-'))
     tempDirs.push(root)
 
+    const feedUrl = 'https://threat-feed.test/merge-feed'
+    const fetchImpl: typeof fetch = async (input) => {
+      const url =
+        typeof input === 'string' ? input : input instanceof URL ? input.toString() : (input as Request).url
+
+      if (url === feedUrl) {
+        return new Response(
+          JSON.stringify({
+            entries: [
+              {
+                id: 'new-entry',
+                type: 'packageName',
+                value: 'new_package',
+                reason: 'new',
+                severity: 'critical',
+              },
+            ],
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } }
+        )
+      }
+
+      return new Response('not found', { status: 404 })
+    }
+
     const store = new ThreatIntelStore({
       cachePath: join(root, 'intel.json'),
+      fetchImpl,
     })
 
     await store.saveSnapshot({
@@ -105,40 +115,7 @@ describe('ThreatIntelStore', () => {
       ],
     })
 
-    const server = createServer((req, res) => {
-      if (req.url === '/feed') {
-        res.setHeader('content-type', 'application/json')
-        res.end(
-          JSON.stringify({
-            entries: [
-              {
-                id: 'new-entry',
-                type: 'packageName',
-                value: 'new_package',
-                reason: 'new',
-                severity: 'critical',
-              },
-            ],
-          })
-        )
-        return
-      }
-
-      res.statusCode = 404
-      res.end('not found')
-    })
-
-    await new Promise<void>((resolve) => {
-      server.listen(0, () => resolve())
-    })
-    servers.push(server)
-
-    const address = server.address()
-    if (!address || typeof address === 'string') {
-      throw new Error('Server did not provide numeric port')
-    }
-
-    await store.syncFromSources([`http://127.0.0.1:${address.port}/feed`])
+    await store.syncFromSources([feedUrl])
     const snapshot = await store.loadSnapshot()
 
     expect(snapshot.entries.some((entry) => entry.id === 'cached-entry')).toBe(true)

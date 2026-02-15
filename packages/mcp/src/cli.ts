@@ -1,6 +1,9 @@
 #!/usr/bin/env node
 
-import { AuditLogger, PolicyManager } from '@sapper-ai/core'
+import { existsSync } from 'node:fs'
+import { dirname, resolve } from 'node:path'
+
+import { AuditLogger, PolicyManager, resolvePolicyPath } from '@sapper-ai/core'
 import type { Policy } from '@sapper-ai/types'
 
 import {
@@ -36,6 +39,7 @@ interface QuarantineRestoreCliArgs {
   command: 'quarantine_restore'
   quarantineDir?: string
   id: string
+  force?: boolean
 }
 
 interface BlocklistSyncCliArgs {
@@ -93,6 +97,37 @@ const DEFAULT_POLICY: Policy = {
   mode: 'enforce',
   defaultAction: 'allow',
   failOpen: true,
+}
+
+function findRepoRoot(startDir: string): string {
+  const start = resolve(startDir)
+
+  let current = start
+  while (true) {
+    const gitPath = resolve(current, '.git')
+    if (existsSync(gitPath)) {
+      return current
+    }
+
+    const parent = dirname(current)
+    if (parent === current) {
+      return start
+    }
+
+    current = parent
+  }
+}
+
+function buildDefaultPolicy(env: NodeJS.ProcessEnv): Policy {
+  const mode = env.SAPPERAI_POLICY_MODE === 'monitor' ? 'monitor' : DEFAULT_POLICY.mode
+  const defaultAction = env.SAPPERAI_DEFAULT_ACTION === 'block' ? 'block' : DEFAULT_POLICY.defaultAction
+  const failOpen = parseBoolean(env.SAPPERAI_FAIL_OPEN, DEFAULT_POLICY.failOpen)
+
+  return {
+    mode,
+    defaultAction,
+    failOpen,
+  }
 }
 
 export function parseCliArgs(argv: string[], env: NodeJS.ProcessEnv = process.env): CliArgs {
@@ -224,6 +259,7 @@ function parseQuarantineArgs(argv: string[], env: NodeJS.ProcessEnv): Quarantine
 
   if (subcommand === 'restore') {
     let id: string | undefined
+    let force = false
 
     for (let index = 0; index < rest.length; index += 1) {
       const arg = rest[index]
@@ -232,6 +268,11 @@ function parseQuarantineArgs(argv: string[], env: NodeJS.ProcessEnv): Quarantine
 
         quarantineDir = nextArg
         index += 1
+        continue
+      }
+
+      if (arg === '--force') {
+        force = true
         continue
       }
 
@@ -259,6 +300,7 @@ function parseQuarantineArgs(argv: string[], env: NodeJS.ProcessEnv): Quarantine
       command: 'quarantine_restore',
       quarantineDir,
       id,
+      force,
     }
   }
 
@@ -505,15 +547,22 @@ export function resolvePolicy(policyPath: string | undefined, env: NodeJS.Proces
     return manager.loadFromFile(policyPath)
   }
 
-  const mode = env.SAPPERAI_POLICY_MODE === 'monitor' ? 'monitor' : DEFAULT_POLICY.mode
-  const defaultAction = env.SAPPERAI_DEFAULT_ACTION === 'block' ? 'block' : DEFAULT_POLICY.defaultAction
-  const failOpen = parseBoolean(env.SAPPERAI_FAIL_OPEN, DEFAULT_POLICY.failOpen)
+  const repoRoot = findRepoRoot(process.cwd())
+  const resolved = resolvePolicyPath({ repoRoot })
+  if (resolved) {
+    try {
+      return manager.loadFromFile(resolved.path)
+    } catch (error) {
+      const parseFailOpen = parseBoolean(env.SAPPERAI_POLICY_PARSE_FAIL_OPEN, false)
+      if (!parseFailOpen) {
+        throw error
+      }
 
-  return {
-    mode,
-    defaultAction,
-    failOpen,
+      return buildDefaultPolicy(env)
+    }
   }
+
+  return buildDefaultPolicy(env)
 }
 
 export async function runCli(argv: string[] = process.argv.slice(2), env: NodeJS.ProcessEnv = process.env): Promise<void> {
@@ -578,6 +627,7 @@ export async function runCli(argv: string[] = process.argv.slice(2), env: NodeJS
     await runQuarantineRestoreCommand({
       id: args.id,
       quarantineDir: args.quarantineDir,
+      force: args.force,
     })
     return
   }

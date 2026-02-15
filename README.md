@@ -28,6 +28,25 @@ const guard = createGuard()
 const decision = await guard.check({ toolName: 'shell', arguments: { cmd: 'ls' } })
 ```
 
+## CLI: Scan -> Harden (Recommended)
+
+```bash
+# 1) Scan your repo (interactive in a TTY)
+npx sapper-ai scan
+
+# 2) If you skipped prompts, you can harden explicitly:
+npx sapper-ai harden --apply
+
+# 3) To include system-level protection (writes to your home directory):
+npx sapper-ai harden --apply --include-system
+```
+
+CI-friendly scan (deterministic, no prompts):
+
+```bash
+npx -y sapper-ai@0.6.0 scan --policy ./sapperai.config.yaml --no-prompt --no-open --no-save
+```
+
 ## Architecture
 
 ```

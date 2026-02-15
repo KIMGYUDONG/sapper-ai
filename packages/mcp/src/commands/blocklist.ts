@@ -9,6 +9,7 @@ interface BlocklistSyncOptions extends BlocklistOutputOptions {
   policy: Policy
   sources?: string[]
   cachePath?: string
+  fetchImpl?: typeof fetch
 }
 
 interface BlocklistStatusOptions extends BlocklistOutputOptions {
@@ -44,7 +45,7 @@ function resolveFeedSources(policy: Policy, sources?: string[]): string[] {
 }
 
 export async function runBlocklistSyncCommand(options: BlocklistSyncOptions): Promise<void> {
-  const store = new ThreatIntelStore({ cachePath: options.cachePath })
+  const store = new ThreatIntelStore({ cachePath: options.cachePath, fetchImpl: options.fetchImpl })
   const sources = resolveFeedSources(options.policy, options.sources)
   if (sources.length === 0) {
     throw new Error('No threat feed sources configured. Set policy.threatFeed.sources or pass --source.')

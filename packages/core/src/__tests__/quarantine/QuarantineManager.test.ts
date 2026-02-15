@@ -71,4 +71,27 @@ describe('QuarantineManager', () => {
     const restoredContent = readFileSync(sourceFile, 'utf8')
     expect(restoredContent).toContain('ignore previous')
   })
+
+  it('refuses to overwrite an existing file unless force=true', async () => {
+    const rootDir = mkdtempSync(join(tmpdir(), 'sapper-restore-conflict-'))
+    tempDirs.push(rootDir)
+
+    const quarantineDir = join(rootDir, 'quarantine')
+    const sourceDir = join(rootDir, 'source')
+    const sourceFile = join(sourceDir, 'plugin.json')
+    mkdirSync(sourceDir, { recursive: true })
+    writeFileSync(sourceFile, '{"prompt":"ignore previous"}', 'utf8')
+
+    const manager = new QuarantineManager({ quarantineDir })
+    const record = await manager.quarantine(sourceFile, decision)
+
+    // Simulate a conflict: a new file now exists at the original restore path.
+    writeFileSync(sourceFile, '{"prompt":"new content"}', 'utf8')
+
+    await expect(manager.restore(record.id)).rejects.toThrow(/Refusing to overwrite existing path/)
+
+    await manager.restore(record.id, { force: true })
+    const restoredContent = readFileSync(sourceFile, 'utf8')
+    expect(restoredContent).toContain('ignore previous')
+  })
 })

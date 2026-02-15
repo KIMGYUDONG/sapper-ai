@@ -1,6 +1,10 @@
-import { describe, expect, it } from 'vitest'
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 
-import { parseCliArgs } from '../cli'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+
+import { parseCliArgs, resolvePolicy } from '../cli'
 
 describe('parseCliArgs', () => {
   it('parses watch subcommand arguments', () => {
@@ -104,5 +108,103 @@ describe('parseCliArgs', () => {
     expect(() => parseCliArgs(['blocklist', 'sync', '--source', '--cache-path', '/tmp/cache.json'])).toThrow(
       'Missing value for --source'
     )
+  })
+})
+
+describe('resolvePolicy', () => {
+  const tempDirs: string[] = []
+
+  afterEach(() => {
+    for (const dir of tempDirs) {
+      try {
+        rmSync(dir, { recursive: true, force: true })
+      } catch {
+        // no-op
+      }
+    }
+    tempDirs.length = 0
+  })
+
+  it('auto-discovers sapperai.config.yaml at repo root when no explicit policy is set', () => {
+    const repoRoot = mkdtempSync(join(tmpdir(), 'sapper-mcp-policy-root-'))
+    tempDirs.push(repoRoot)
+    mkdirSync(join(repoRoot, '.git'), { recursive: true })
+
+    const nested = join(repoRoot, 'nested')
+    mkdirSync(nested, { recursive: true })
+
+    writeFileSync(
+      join(repoRoot, 'sapperai.config.yaml'),
+      ['mode: monitor', 'defaultAction: block', 'failOpen: false', ''].join('\n'),
+      'utf8'
+    )
+
+    const cwdSpy = vi.spyOn(process, 'cwd').mockReturnValue(nested)
+    try {
+      const policy = resolvePolicy(undefined, {})
+      expect(policy.mode).toBe('monitor')
+      expect(policy.defaultAction).toBe('block')
+      expect(policy.failOpen).toBe(false)
+    } finally {
+      cwdSpy.mockRestore()
+    }
+  })
+
+  it('fails closed on auto-discovered policy parse/validation errors by default', () => {
+    const repoRoot = mkdtempSync(join(tmpdir(), 'sapper-mcp-policy-bad-'))
+    tempDirs.push(repoRoot)
+    mkdirSync(join(repoRoot, '.git'), { recursive: true })
+
+    writeFileSync(
+      join(repoRoot, 'sapperai.config.yaml'),
+      ['mode: enforce', 'defaultAction: allow', 'thresholds:', '  riskThreshold: not-a-number', ''].join('\n'),
+      'utf8'
+    )
+
+    const cwdSpy = vi.spyOn(process, 'cwd').mockReturnValue(repoRoot)
+    try {
+      expect(() => resolvePolicy(undefined, {})).toThrow()
+    } finally {
+      cwdSpy.mockRestore()
+    }
+  })
+
+  it('can fail open on auto-discovered policy parse errors when SAPPERAI_POLICY_PARSE_FAIL_OPEN=true', () => {
+    const repoRoot = mkdtempSync(join(tmpdir(), 'sapper-mcp-policy-bad-open-'))
+    tempDirs.push(repoRoot)
+    mkdirSync(join(repoRoot, '.git'), { recursive: true })
+
+    writeFileSync(
+      join(repoRoot, 'sapperai.config.yaml'),
+      ['mode: enforce', 'defaultAction: allow', 'thresholds:', '  riskThreshold: not-a-number', ''].join('\n'),
+      'utf8'
+    )
+
+    const cwdSpy = vi.spyOn(process, 'cwd').mockReturnValue(repoRoot)
+    try {
+      const policy = resolvePolicy(undefined, {
+        SAPPERAI_POLICY_PARSE_FAIL_OPEN: 'true',
+        SAPPERAI_POLICY_MODE: 'monitor',
+        SAPPERAI_DEFAULT_ACTION: 'block',
+        SAPPERAI_FAIL_OPEN: 'false',
+      })
+      expect(policy).toEqual({ mode: 'monitor', defaultAction: 'block', failOpen: false })
+    } finally {
+      cwdSpy.mockRestore()
+    }
+  })
+
+  it('treats an explicit policy path as fatal on parse errors even when fail-open is enabled', () => {
+    const repoRoot = mkdtempSync(join(tmpdir(), 'sapper-mcp-policy-explicit-bad-'))
+    tempDirs.push(repoRoot)
+
+    const policyPath = join(repoRoot, 'policy.yaml')
+    writeFileSync(policyPath, ['mode: enforce', 'defaultAction: allow', 'thresholds:', '  riskThreshold: bad', ''].join('\n'), 'utf8')
+
+    expect(() =>
+      resolvePolicy(policyPath, {
+        SAPPERAI_POLICY_PARSE_FAIL_OPEN: 'true',
+      })
+    ).toThrow()
   })
 })

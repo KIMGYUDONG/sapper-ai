@@ -7,7 +7,8 @@ export class Scanner {
     toolName: string,
     description: string,
     policy: Policy,
-    detectors: Detector[]
+    detectors: Detector[],
+    meta?: Record<string, unknown>
   ): Promise<Decision> {
     const engine = new DecisionEngine(detectors)
 
@@ -15,6 +16,7 @@ export class Scanner {
       kind: 'install_scan',
       policy,
       meta: {
+        ...(meta ?? {}),
         toolName,
         scanText: description,
       },

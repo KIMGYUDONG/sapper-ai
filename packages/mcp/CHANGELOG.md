@@ -1,5 +1,16 @@
 # @sapper-ai/mcp
 
+## 0.3.0
+
+### Minor Changes
+
+- feat(mcp): auto policy discovery + safer quarantine restore (add --force)
+
+### Patch Changes
+
+- Updated dependencies
+  - @sapper-ai/core@0.2.2
+
 ## 0.2.1
 
 ### Patch Changes

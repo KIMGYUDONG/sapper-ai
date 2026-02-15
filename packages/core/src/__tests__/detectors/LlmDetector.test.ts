@@ -182,4 +182,78 @@ describe('LlmDetector', () => {
       /Unable to parse LLM detector response JSON/
     )
   })
+
+  it('includes install-time scanText in the prompt when provided via context meta', async () => {
+    const fetchMock = vi.mocked(fetch)
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        output: [
+          {
+            content: [
+              {
+                type: 'output_text',
+                text: '{"risk":0.12,"confidence":0.84,"reasoning":"Likely benign documentation"}',
+              },
+            ],
+          },
+        ],
+      }),
+    } as Response)
+
+    const detector = new LlmDetector(openAiConfig)
+    const ctx: AssessmentContext = {
+      kind: 'install_scan',
+      policy: basePolicy,
+      meta: {
+        priorRisk: 0.9,
+        toolName: 'skill:demo/skill.md',
+        scanSource: 'file_surface',
+        sourcePath: '/tmp/project/skill.md',
+        sourceType: 'skill',
+        scanText: 'Example: $(date -Iseconds)',
+      },
+    }
+
+    const result = await detector.run(ctx)
+
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    const body = String(fetchMock.mock.calls[0]?.[1]?.body)
+    expect(body).toContain('Example: $(date -Iseconds)')
+    expect(result?.risk).toBe(0.12)
+  })
+
+  it('retries OpenAI requests on 429 with Retry-After', async () => {
+    const fetchMock = vi.mocked(fetch)
+    fetchMock
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 429,
+        headers: { get: (name: string) => (name.toLowerCase() === 'retry-after' ? '0' : null) },
+        json: async () => ({}),
+      } as unknown as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          output: [
+            {
+              content: [
+                {
+                  type: 'output_text',
+                  text: '{"risk":0.81,"confidence":0.72,"reasoning":"Likely prompt injection"}',
+                },
+              ],
+            },
+          ],
+        }),
+      } as Response)
+
+    const detector = new LlmDetector(openAiConfig)
+    const ctx = createContext(0.9)
+
+    const result = await detector.run(ctx)
+
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(result?.risk).toBe(0.81)
+  })
 })

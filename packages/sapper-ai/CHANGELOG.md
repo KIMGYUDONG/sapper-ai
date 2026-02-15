@@ -1,5 +1,18 @@
 # sapper-ai
 
+## 0.6.0
+
+### Minor Changes
+
+- feat(cli): scan -> harden end-to-end UX (no-prompt, quarantine, MCP config helpers)
+
+### Patch Changes
+
+- Updated dependencies
+  - @sapper-ai/mcp@0.3.0
+  - @sapper-ai/core@0.2.2
+  - @sapper-ai/openai@0.2.2
+
 ## 0.5.0
 
 ### Minor Changes
