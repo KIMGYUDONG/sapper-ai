@@ -18,6 +18,17 @@ sapperai-proxy watch --policy ./policy.yaml
 sapperai-proxy watch --path ~/.claude/plugins --path ~/.config/claude-code
 ```
 
+- Optional dynamic checks (skill/agent only):
+
+```bash
+sapperai-proxy watch \
+  --policy ./policy.yaml \
+  --dynamic \
+  --dynamic-max-cases 8 \
+  --dynamic-max-duration-ms 1500 \
+  --dynamic-seed watch-default
+```
+
 - Relevant env vars:
   - `SAPPERAI_POLICY_PATH`
   - `SAPPERAI_AUDIT_LOG_PATH`
@@ -51,6 +62,16 @@ sapperai-proxy quarantine restore <id>
   - Check policy mode (`monitor` will log only).
   - Confirm write permissions for quarantine directory.
 
+- **Dynamic checks did not run**
+  - Confirm `--dynamic` is enabled.
+  - Dynamic watch is currently scoped to `skill`/`agent` targets.
+  - Check audit phases: `watch_dynamic_scan`, `watch_dynamic_vulnerable`, `watch_dynamic_error`.
+
+- **Dynamic checks seem slow**
+  - Lower `--dynamic-max-cases`.
+  - Lower `--dynamic-max-duration-ms`.
+  - Keep watch paths narrow with repeated `--path` flags.
+
 - **High CPU while watching**
   - Limit paths with repeated `--path` flags.
   - Exclude broad project roots when possible.
@@ -60,6 +81,9 @@ sapperai-proxy quarantine restore <id>
 ```bash
 # Start watcher
 sapperai-proxy watch --policy ./policy.yaml
+
+# Start watcher with dynamic checks
+sapperai-proxy watch --policy ./policy.yaml --dynamic
 
 # List quarantine records
 sapperai-proxy quarantine list

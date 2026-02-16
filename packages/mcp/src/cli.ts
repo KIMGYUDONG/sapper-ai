@@ -28,6 +28,14 @@ interface WatchCliArgs {
   command: 'watch'
   policyPath?: string
   watchPaths?: string[]
+  dynamic: WatchDynamicCliOptions
+}
+
+interface WatchDynamicCliOptions {
+  enabled: boolean
+  maxCases: number
+  maxDurationMs: number
+  seed: string
 }
 
 interface QuarantineListCliArgs {
@@ -97,6 +105,13 @@ const DEFAULT_POLICY: Policy = {
   mode: 'enforce',
   defaultAction: 'allow',
   failOpen: true,
+}
+
+const WATCH_DYNAMIC_DEFAULTS: WatchDynamicCliOptions = {
+  enabled: false,
+  maxCases: 8,
+  maxDurationMs: 1500,
+  seed: 'watch-default',
 }
 
 function findRepoRoot(startDir: string): string {
@@ -197,6 +212,10 @@ function parseProxyArgs(argv: string[], env: NodeJS.ProcessEnv): ProxyCliArgs {
 function parseWatchArgs(argv: string[], env: NodeJS.ProcessEnv): WatchCliArgs {
   let policyPath = env.SAPPERAI_POLICY_PATH
   const watchPaths: string[] = []
+  let dynamicEnabled = WATCH_DYNAMIC_DEFAULTS.enabled
+  let dynamicMaxCases = WATCH_DYNAMIC_DEFAULTS.maxCases
+  let dynamicMaxDurationMs = WATCH_DYNAMIC_DEFAULTS.maxDurationMs
+  let dynamicSeed = WATCH_DYNAMIC_DEFAULTS.seed
 
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index]
@@ -217,6 +236,35 @@ function parseWatchArgs(argv: string[], env: NodeJS.ProcessEnv): WatchCliArgs {
       continue
     }
 
+    if (arg === '--dynamic') {
+      dynamicEnabled = true
+      continue
+    }
+
+    if (arg === '--dynamic-max-cases') {
+      const nextArg = requireOptionValue(argv, index, '--dynamic-max-cases')
+
+      dynamicMaxCases = parsePositiveIntegerOption(nextArg, '--dynamic-max-cases', 100)
+      index += 1
+      continue
+    }
+
+    if (arg === '--dynamic-max-duration-ms') {
+      const nextArg = requireOptionValue(argv, index, '--dynamic-max-duration-ms')
+
+      dynamicMaxDurationMs = parsePositiveIntegerOption(nextArg, '--dynamic-max-duration-ms', 30000)
+      index += 1
+      continue
+    }
+
+    if (arg === '--dynamic-seed') {
+      const nextArg = requireOptionValue(argv, index, '--dynamic-seed')
+
+      dynamicSeed = nextArg
+      index += 1
+      continue
+    }
+
     throw new Error(`Unknown argument for watch: ${arg}`)
   }
 
@@ -224,6 +272,12 @@ function parseWatchArgs(argv: string[], env: NodeJS.ProcessEnv): WatchCliArgs {
     command: 'watch',
     policyPath,
     watchPaths: watchPaths.length > 0 ? watchPaths : undefined,
+    dynamic: {
+      enabled: dynamicEnabled,
+      maxCases: dynamicMaxCases,
+      maxDurationMs: dynamicMaxDurationMs,
+      seed: dynamicSeed,
+    },
   }
 }
 
@@ -637,6 +691,7 @@ export async function runCli(argv: string[] = process.argv.slice(2), env: NodeJS
     await runWatchCommand({
       policy,
       watchPaths: args.watchPaths,
+      dynamic: args.dynamic,
       env,
     })
     return
@@ -691,6 +746,15 @@ function requireOptionValue(args: string[], index: number, flagName: string): st
   }
 
   return value
+}
+
+function parsePositiveIntegerOption(value: string, flagName: string, max: number): number {
+  const parsed = Number(value)
+  if (!Number.isFinite(parsed) || !Number.isInteger(parsed) || parsed <= 0 || parsed > max) {
+    throw new Error(`Invalid value for ${flagName}: expected a positive integer <= ${max}, received "${value}"`)
+  }
+
+  return parsed
 }
 
 function isDirectExecution(argv: string[]): boolean {
