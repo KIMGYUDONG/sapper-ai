@@ -1,6 +1,6 @@
 {
   "name": "@sapper-ai/mcp",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Model Context Protocol (MCP) security proxy for SapperAI",
   "keywords": [
     "security",

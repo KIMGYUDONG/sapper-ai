@@ -1,5 +1,11 @@
 # @sapper-ai/mcp
 
+## 0.3.1
+
+### Patch Changes
+
+- fix(cli): polish scan output and inline OpenAI API key onboarding for --ai mode
+
 ## 0.3.0
 
 ### Minor Changes
