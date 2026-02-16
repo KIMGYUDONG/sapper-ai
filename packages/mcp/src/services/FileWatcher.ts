@@ -19,9 +19,26 @@ import {
 } from '@sapper-ai/core'
 import type { AssessmentContext, AuditLogEntry, Decision, Detector, Policy } from '@sapper-ai/types'
 import chokidar, { type FSWatcher } from 'chokidar'
+import { AdversaryCampaignRunner } from './AdversaryCampaignRunner'
 import { loadThreatIntelEntries } from './threatIntel'
 
 type AuditLoggerLike = Pick<AuditLogger, 'log'>
+
+interface DynamicWatchOptions {
+  enabled?: boolean
+  maxCases?: number
+  maxDurationMs?: number
+  seed?: string
+}
+
+type AdversaryRunnerLike = Pick<AdversaryCampaignRunner, 'assessInMemory'>
+
+const DEFAULT_DYNAMIC_OPTIONS: Required<DynamicWatchOptions> = {
+  enabled: false,
+  maxCases: 8,
+  maxDurationMs: 1500,
+  seed: 'watch-default',
+}
 
 interface FileWatcherOptions {
   policy: Policy
@@ -31,6 +48,8 @@ interface FileWatcherOptions {
   detectors?: Detector[]
   watchPaths?: string[]
   threatIntelStore?: ThreatIntelStore
+  dynamic?: DynamicWatchOptions
+  adversaryRunner?: AdversaryRunnerLike
 }
 
 interface ScanTarget {
@@ -53,6 +72,8 @@ export class FileWatcher {
   private readonly detectors: Detector[]
   private readonly watchPaths: string[]
   private readonly threatIntelStore: ThreatIntelStore
+  private readonly dynamic: Required<DynamicWatchOptions>
+  private readonly adversaryRunner: AdversaryRunnerLike
 
   private watcher: FSWatcher | null = null
   private readonly inFlightPaths = new Set<string>()
@@ -76,6 +97,11 @@ export class FileWatcher {
     this.detectors = options.detectors ?? [new RulesDetector()]
     this.watchPaths = options.watchPaths ?? toDefaultWatchPaths()
     this.threatIntelStore = options.threatIntelStore ?? new ThreatIntelStore({ cachePath: process.env.SAPPERAI_THREAT_FEED_CACHE })
+    this.dynamic = {
+      ...DEFAULT_DYNAMIC_OPTIONS,
+      ...options.dynamic,
+    }
+    this.adversaryRunner = options.adversaryRunner ?? new AdversaryCampaignRunner()
   }
 
   async start(): Promise<void> {
@@ -102,11 +128,11 @@ export class FileWatcher {
     })
 
     this.watcher.on('add', (pathName: string) => {
-      void this.handleFile(pathName)
+      this.handleWatchEvent(pathName)
     })
 
     this.watcher.on('change', (pathName: string) => {
-      void this.handleFile(pathName)
+      this.handleWatchEvent(pathName)
     })
 
     await new Promise<void>((resolve, reject) => {
@@ -145,6 +171,29 @@ export class FileWatcher {
     this.watcher = null
   }
 
+  private handleWatchEvent(filePath: string): void {
+    void this.handleFile(filePath).catch((error: unknown) => {
+      const target: ScanTarget = {
+        id: `watch:${buildEntryName(filePath)}`,
+        sourcePath: filePath,
+        sourceType: classifyTargetType(filePath),
+        surface: '',
+      }
+
+      this.logAuditEntry(
+        target,
+        {
+          action: 'allow',
+          risk: 0,
+          confidence: 0,
+          reasons: [`Watch handler error: ${error instanceof Error ? error.message : String(error)}`],
+          evidence: [],
+        },
+        'watch_scan_error'
+      )
+    })
+  }
+
   private async handleFile(filePath: string): Promise<void> {
     if (!isConfigLikeFile(filePath) || this.inFlightPaths.has(filePath)) {
       return
@@ -161,6 +210,8 @@ export class FileWatcher {
       const targets = this.toTargets(filePath, content)
       for (const target of targets) {
         const effectivePolicy = applyThreatIntelBlocklist(this.policy, this.threatIntelEntries)
+        const dynamicEligible = this.shouldRunDynamicForTarget(target)
+        let dynamicEvaluated = false
         const policyMatch = evaluatePolicyMatch(effectivePolicy, {
           toolName: target.id,
           content: target.surface,
@@ -178,7 +229,15 @@ export class FileWatcher {
             },
             'watch_policy_match'
           )
-          continue
+
+          if (dynamicEligible) {
+            dynamicEvaluated = true
+            if (await this.evaluateDynamicTarget(filePath, target, effectivePolicy)) {
+              return
+            }
+          } else {
+            continue
+          }
         }
 
         if (policyMatch.action === 'block') {
@@ -194,6 +253,14 @@ export class FileWatcher {
 
           if (this.policy.mode === 'enforce') {
             await this.quarantineManager.quarantine(filePath, blockDecision)
+            return
+          }
+
+          if (dynamicEligible) {
+            dynamicEvaluated = true
+          }
+
+          if (dynamicEligible && (await this.evaluateDynamicTarget(filePath, target, effectivePolicy))) {
             return
           }
 
@@ -226,10 +293,158 @@ export class FileWatcher {
           }
           return
         }
+
+        if (dynamicEligible && !dynamicEvaluated && (await this.evaluateDynamicTarget(filePath, target, effectivePolicy))) {
+          return
+        }
       }
     } finally {
       this.inFlightPaths.delete(filePath)
     }
+  }
+
+  private shouldRunDynamicForTarget(target: ScanTarget): boolean {
+    if (this.dynamic.enabled !== true) {
+      return false
+    }
+
+    return target.sourceType === 'skill' || target.sourceType === 'agent'
+  }
+
+  private async evaluateDynamicTarget(filePath: string, target: ScanTarget, policy: Policy): Promise<boolean> {
+    const startedAt = performance.now()
+
+    try {
+      const result = await this.adversaryRunner.assessInMemory({
+        policy,
+        target: {
+          id: target.id,
+          sourcePath: target.sourcePath,
+          sourceType: target.sourceType,
+          surface: target.surface,
+        },
+        maxCases: this.dynamic.maxCases,
+        maxDurationMs: this.dynamic.maxDurationMs,
+        seed: this.dynamic.seed,
+        skipSync: true,
+      })
+      const elapsedMs = Math.max(1, Math.round(performance.now() - startedAt))
+
+      const dynamicMeta = {
+        dynamic: true,
+        totalCases: result.totalCases,
+        vulnerableCases: result.vulnerableCases,
+      }
+
+      if (result.vulnerable || result.vulnerableCases > 0) {
+        const reasons = result.findings
+          .map((finding) => finding.decision.reasons[0])
+          .filter((value): value is string => typeof value === 'string' && value.length > 0)
+          .slice(0, 3)
+
+        const maxRisk = result.findings.reduce((max, finding) => Math.max(max, finding.decision.risk), 0)
+        const maxConfidence = result.findings.reduce((max, finding) => Math.max(max, finding.decision.confidence), 0)
+        const decision: Decision = {
+          action: this.policy.mode === 'enforce' ? 'block' : 'allow',
+          risk: this.normalizeRisk(maxRisk, 1),
+          confidence: this.normalizeRisk(maxConfidence, 1),
+          reasons: reasons.length > 0 ? reasons : ['Dynamic evaluation identified exploitable behavior'],
+          evidence: [],
+        }
+
+        this.logAuditEntry(target, decision, 'watch_dynamic_vulnerable', dynamicMeta, elapsedMs)
+
+        if (this.policy.mode !== 'enforce') {
+          return false
+        }
+
+        try {
+          await this.quarantineManager.quarantine(filePath, decision)
+        } catch (error) {
+          const reasons = [`Quarantine failed: ${error instanceof Error ? error.message : String(error)}`]
+          this.logAuditEntry(
+            target,
+            {
+              action: 'allow',
+              risk: 0,
+              confidence: 0,
+              reasons,
+              evidence: [],
+            },
+            'watch_quarantine_error'
+          )
+        }
+        return true
+      }
+
+      this.logAuditEntry(
+        target,
+        {
+          action: 'allow',
+          risk: 0,
+          confidence: 1,
+          reasons: ['Dynamic evaluation found no exploitable behavior'],
+          evidence: [],
+        },
+        'watch_dynamic_scan',
+        dynamicMeta,
+        elapsedMs
+      )
+
+      return false
+    } catch (error) {
+      const elapsedMs = Math.max(1, Math.round(performance.now() - startedAt))
+      const shouldFailOpen = this.policy.mode === 'monitor' || this.policy.failOpen !== false
+      const errorDecision: Decision = {
+        action: shouldFailOpen ? 'allow' : 'block',
+        risk: shouldFailOpen ? 0 : 1,
+        confidence: shouldFailOpen ? 0 : 1,
+        reasons: [`Dynamic evaluation failed: ${error instanceof Error ? error.message : String(error)}`],
+        evidence: [],
+      }
+
+      this.logAuditEntry(
+        target,
+        errorDecision,
+        'watch_dynamic_error',
+        {
+          dynamic: true,
+          failOpen: shouldFailOpen,
+        },
+        elapsedMs
+      )
+
+      if (shouldFailOpen || this.policy.mode !== 'enforce') {
+        return false
+      }
+
+      try {
+        await this.quarantineManager.quarantine(filePath, errorDecision)
+      } catch (quarantineError) {
+        const reasons = [`Quarantine failed: ${quarantineError instanceof Error ? quarantineError.message : String(quarantineError)}`]
+        this.logAuditEntry(
+          target,
+          {
+            action: 'allow',
+            risk: 0,
+            confidence: 0,
+            reasons,
+            evidence: [],
+          },
+          'watch_quarantine_error'
+        )
+      }
+
+      return true
+    }
+  }
+
+  private normalizeRisk(value: number | undefined, fallback: number): number {
+    if (typeof value !== 'number' || !Number.isFinite(value)) {
+      return fallback
+    }
+
+    return Math.max(0, Math.min(1, value))
   }
 
   private async readFileIfPresent(filePath: string): Promise<string | null> {
@@ -275,7 +490,16 @@ export class FileWatcher {
   private logAuditEntry(
     target: ScanTarget,
     decision: Decision,
-    phase: 'watch_scan' | 'watch_quarantine_error' | 'watch_policy_match' = 'watch_scan'
+    phase:
+      | 'watch_scan'
+      | 'watch_quarantine_error'
+      | 'watch_policy_match'
+      | 'watch_dynamic_scan'
+      | 'watch_dynamic_vulnerable'
+      | 'watch_dynamic_error'
+      | 'watch_scan_error' = 'watch_scan',
+    meta: Record<string, unknown> = {},
+    durationMs = 0
   ): void {
     const context = {
       kind: 'install_scan',
@@ -285,6 +509,7 @@ export class FileWatcher {
         scanSource: 'watch_surface',
         sourcePath: target.sourcePath,
         sourceType: target.sourceType,
+        ...meta,
       },
     } as AssessmentContext
 
@@ -292,7 +517,7 @@ export class FileWatcher {
       timestamp: new Date().toISOString(),
       context,
       decision,
-      durationMs: 0,
+      durationMs,
     }
 
     this.auditLogger.log(entry)

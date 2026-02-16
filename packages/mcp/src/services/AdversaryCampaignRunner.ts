@@ -46,6 +46,29 @@ export interface ReplayOptions {
   reproPath: string
 }
 
+export interface InMemoryAssessmentTarget {
+  id: string
+  sourcePath: string
+  sourceType: string
+  surface: string
+}
+
+export interface InMemoryAssessmentOptions {
+  policy: Policy
+  target: InMemoryAssessmentTarget
+  maxCases?: number
+  maxDurationMs?: number
+  seed?: string
+  skipSync?: true
+}
+
+export interface InMemoryAssessmentResult {
+  totalCases: number
+  vulnerableCases: number
+  findings: Finding[]
+  vulnerable: boolean
+}
+
 function builtInAttackCorpus(): AttackCase[] {
   return [
     {
@@ -256,6 +279,94 @@ export class AdversaryCampaignRunner {
     }
   }
 
+  async assessInMemory(options: InMemoryAssessmentOptions): Promise<InMemoryAssessmentResult> {
+    const policyForAssessment = this.toEnforcePolicy(options.policy)
+    const detectors = await this.resolveDetectors(policyForAssessment, {
+      skipSync: options.skipSync ?? true,
+    })
+
+    const guard = new Guard(new DecisionEngine(detectors), {
+      log: () => {
+        // No-op in-memory logger.
+      },
+    } as unknown as AuditLogger, policyForAssessment)
+
+    const seed = options.seed ?? 'watch-default'
+    const maxCases = options.maxCases ?? 8
+    const maxDurationMs = options.maxDurationMs ?? 1500
+    const startedAt = Date.now()
+    const queue: AttackCase[] = deterministicShuffle(builtInAttackCorpus(), seed)
+
+    const findings: Finding[] = []
+    let executedCases = 0
+
+    for (const attackCase of queue) {
+      if (executedCases >= maxCases || Date.now() - startedAt >= maxDurationMs) {
+        break
+      }
+
+      const variants = mutatePrompt(attackCase.prompt)
+      for (const variant of variants) {
+        if (executedCases >= maxCases || Date.now() - startedAt >= maxDurationMs) {
+          break
+        }
+
+        executedCases += 1
+
+        const toolCall: ToolCall = {
+          toolName: options.target.id,
+          arguments: {
+            input: variant,
+            campaignAttackId: attackCase.id,
+            target: {
+              id: options.target.id,
+              sourcePath: options.target.sourcePath,
+              sourceType: options.target.sourceType,
+              surface: options.target.surface,
+            },
+          },
+          meta: {
+            sandbox: true,
+            attackLabel: attackCase.label,
+            assessmentMode: 'in_memory',
+            targetId: options.target.id,
+            sourcePath: options.target.sourcePath,
+            sourceType: options.target.sourceType,
+          },
+        }
+
+        const decision = await guard.preTool(toolCall)
+        if (decision.action === 'allow') {
+          const score = this.scorer.score({
+            outcome: 'allowed',
+            risk: Math.max(decision.risk, 0.85),
+            confidence: Math.max(decision.confidence, 0.7),
+            reproductionRate: 1,
+            impact: attackCase.impact,
+          })
+
+          findings.push({
+            id: `finding-${findings.length + 1}`,
+            attackId: attackCase.id,
+            label: attackCase.label,
+            severity10: score.severity10,
+            exposure10: score.exposure10,
+            decision,
+            reproPath: 'in-memory',
+            triggerText: variant.slice(0, 200),
+          })
+        }
+      }
+    }
+
+    return {
+      totalCases: executedCases,
+      vulnerableCases: findings.length,
+      findings,
+      vulnerable: findings.length > 0,
+    }
+  }
+
   async replay(options: ReplayOptions): Promise<{
     decision: Decision
     vulnerable: boolean
@@ -310,6 +421,14 @@ export class AdversaryCampaignRunner {
       threatIntelEntries,
       preferredDetectors: extended.detectors,
     })
+  }
+
+  private toEnforcePolicy(policy: Policy): Policy {
+    const { allowlist: _allowlist, ...rest } = policy
+    return {
+      ...rest,
+      mode: 'enforce',
+    }
   }
 
   private async writeArtifacts(

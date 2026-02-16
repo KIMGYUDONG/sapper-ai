@@ -17,6 +17,43 @@ describe('parseCliArgs', () => {
     })
   })
 
+  it('parses watch dynamic arguments', () => {
+    const args = parseCliArgs([
+      'watch',
+      '--dynamic',
+      '--dynamic-max-cases',
+      '12',
+      '--dynamic-max-duration-ms',
+      '2500',
+      '--dynamic-seed',
+      'watch-seed',
+    ])
+
+    expect(args).toMatchObject({
+      command: 'watch',
+      dynamic: {
+        enabled: true,
+        maxCases: 12,
+        maxDurationMs: 2500,
+        seed: 'watch-seed',
+      },
+    })
+  })
+
+  it('applies watch dynamic defaults when omitted', () => {
+    const args = parseCliArgs(['watch'])
+
+    expect(args).toMatchObject({
+      command: 'watch',
+      dynamic: {
+        enabled: false,
+        maxCases: 8,
+        maxDurationMs: 1500,
+        seed: 'watch-default',
+      },
+    })
+  })
+
   it('parses proxy mode with separator command', () => {
     const args = parseCliArgs(['--policy', '/tmp/policy.yaml', '--', 'npx', '@modelcontextprotocol/server-example'])
 
@@ -107,6 +144,17 @@ describe('parseCliArgs', () => {
   it('rejects option flags used as missing values', () => {
     expect(() => parseCliArgs(['blocklist', 'sync', '--source', '--cache-path', '/tmp/cache.json'])).toThrow(
       'Missing value for --source'
+    )
+  })
+
+  it('rejects invalid watch dynamic numeric values', () => {
+    expect(() => parseCliArgs(['watch', '--dynamic-max-cases', '0'])).toThrow('Invalid value for --dynamic-max-cases')
+    expect(() => parseCliArgs(['watch', '--dynamic-max-cases', '101'])).toThrow('Invalid value for --dynamic-max-cases')
+    expect(() => parseCliArgs(['watch', '--dynamic-max-duration-ms', 'abc'])).toThrow(
+      'Invalid value for --dynamic-max-duration-ms'
+    )
+    expect(() => parseCliArgs(['watch', '--dynamic-max-duration-ms', '30001'])).toThrow(
+      'Invalid value for --dynamic-max-duration-ms'
     )
   })
 })
