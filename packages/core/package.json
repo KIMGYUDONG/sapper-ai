@@ -1,6 +1,6 @@
 {
   "name": "@sapper-ai/core",
-  "version": "0.2.2",
+  "version": "0.3.0",
   "description": "Core security engine for SapperAI - rules-based threat detection and policy enforcement",
   "keywords": [
     "security",

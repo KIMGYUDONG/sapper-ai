@@ -1,5 +1,13 @@
 # @sapper-ai/mcp
 
+## 0.3.2
+
+### Patch Changes
+
+- Updated dependencies [96f1a4b]
+  - @sapper-ai/core@0.3.0
+  - @sapper-ai/types@0.3.0
+
 ## 0.3.1
 
 ### Patch Changes
