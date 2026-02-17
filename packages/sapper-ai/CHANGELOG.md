@@ -1,5 +1,25 @@
 # sapper-ai
 
+## 0.7.0
+
+### Minor Changes
+
+- 96f1a4b: Add OpenClaw Skill Scanner with two-phase security analysis
+
+  - New types: SkillMetadata, Honeytoken, HoneytokenFinding, SkillScanResult
+  - New SkillParser with YAML size limits and frontmatter validation
+  - Static scanning via RulesDetector-based prompt injection detection
+  - Dynamic scanning via Docker sandbox + mitmproxy honeytoken exfiltration detection
+  - CLI `sapper-ai openclaw` subcommand with interactive wizard
+  - Security hardening: YAML bomb defense, error path sanitization, false positive separation
+
+### Patch Changes
+
+- Updated dependencies [96f1a4b]
+  - @sapper-ai/core@0.3.0
+  - @sapper-ai/types@0.3.0
+  - @sapper-ai/mcp@0.3.2
+
 ## 0.6.2
 
 ### Patch Changes
