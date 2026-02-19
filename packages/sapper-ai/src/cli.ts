@@ -1215,7 +1215,8 @@ function isDirectExecution(argv: string[]): boolean {
     return false
   }
 
-  return entry.endsWith('/cli.js') || entry.endsWith('\\cli.js') || entry.endsWith('/cli.ts')
+  const base = entry.replace(/\\/g, '/').split('/').pop() ?? ''
+  return base === 'cli.js' || base === 'cli.ts' || base === 'sapper-ai'
 }
 
 if (isDirectExecution(process.argv)) {
