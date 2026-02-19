@@ -16,6 +16,7 @@ import { runScan, type ScanOptions } from './scan'
 import { detectOpenClawEnvironment } from './openclaw/detect'
 import { resolveOpenClawPolicy, scanSkills, type OpenClawScanProgressEvent } from './openclaw/scanner'
 import { isCiEnv } from './utils/env'
+import { getInteractivePromptState } from './utils/interactive'
 import { getStatus as getSetupStatus, registerHooks, removeHooks } from './guard/setup'
 
 export async function runCli(argv: string[] = process.argv.slice(2)): Promise<number> {
@@ -39,11 +40,12 @@ export async function runCli(argv: string[] = process.argv.slice(2)): Promise<nu
 
     const scanExitCode = await runScan(scanOptions)
 
+    const hardenPromptState = getInteractivePromptState({
+      noPrompt: parsed.noPrompt,
+      env: process.env,
+    })
     const shouldOfferHarden =
-      parsed.noPrompt !== true &&
-      process.stdout.isTTY === true &&
-      process.stdin.isTTY === true &&
-      isCiEnv(process.env) !== true &&
+      hardenPromptState.allowed &&
       (parsed.harden === true || (await getHardenPlanSummary({ includeSystem: true })).actions.length > 0)
 
     if (shouldOfferHarden) {
@@ -1129,7 +1131,13 @@ async function resolveScanOptions(args: {
     return { ...common, targets: [cwd], deep: true, ai: args.ai, scopeLabel: 'Current + subdirectories' }
   }
 
-  if (args.noPrompt === true || process.stdout.isTTY !== true) {
+  const promptState = getInteractivePromptState({
+    noPrompt: args.noPrompt,
+    env: process.env,
+    checkCi: false,
+  })
+
+  if (!promptState.allowed) {
     return { ...common, targets: [cwd], deep: true, ai: args.ai, scopeLabel: 'Current + subdirectories' }
   }
 

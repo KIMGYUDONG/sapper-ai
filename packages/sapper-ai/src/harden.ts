@@ -6,8 +6,8 @@ import * as readline from 'node:readline'
 import pkg from '../package.json'
 
 import { renderPolicyYaml } from './policyYaml'
-import { isCiEnv } from './utils/env'
 import { atomicWriteFile } from './utils/fs'
+import { getInteractivePromptState } from './utils/interactive'
 import { findRepoRoot } from './utils/repoRoot'
 import { isSemver } from './utils/semver'
 
@@ -49,9 +49,7 @@ export interface HardenOptions {
 }
 
 function isInteractivePromptAllowed(options: HardenOptions): boolean {
-  if (options.noPrompt === true) return false
-  if (isCiEnv(options.env)) return false
-  return process.stdout.isTTY === true && process.stdin.isTTY === true
+  return getInteractivePromptState({ noPrompt: options.noPrompt, env: options.env }).allowed
 }
 
 async function promptYesNo(question: string, defaultYes: boolean): Promise<boolean> {

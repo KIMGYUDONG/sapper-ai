@@ -18,6 +18,7 @@ import type { Decision, LlmConfig, Policy } from '@sapper-ai/types'
 
 import { getAuthPath, loadOpenAiApiKey, promptAndSaveOpenAiApiKey } from './auth'
 import { presets } from './presets'
+import { formatInteractivePromptReasons, getInteractivePromptState } from './utils/interactive'
 import { createProgressBar } from './utils/progress'
 import { createColors, header, padLeft, padRightVisual, riskColor, table, truncateToWidth } from './utils/format'
 import { findRepoRoot } from './utils/repoRoot'
@@ -482,11 +483,14 @@ export async function runScan(options: ScanOptions = {}): Promise<number> {
   if (aiEnabled) {
     let apiKey = await loadOpenAiApiKey()
     if (!apiKey) {
-      const canPrompt =
-        options.noPrompt !== true && process.stdout.isTTY === true && process.stdin.isTTY === true
+      const promptState = getInteractivePromptState({
+        noPrompt: options.noPrompt,
+        checkCi: false,
+      })
 
-      if (!canPrompt) {
+      if (!promptState.allowed) {
         console.log('  Error: OPENAI_API_KEY environment variable is required for --ai mode.\n')
+        console.log(`  Prompt unavailable: ${formatInteractivePromptReasons(promptState.reasons)}.\n`)
         return 1
       }
 

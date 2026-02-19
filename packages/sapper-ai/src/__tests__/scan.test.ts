@@ -5,7 +5,12 @@ import { join } from 'node:path'
 
 import { describe, expect, it, vi } from 'vitest'
 
-async function loadScanWithHomedir(home: string) {
+async function loadScanWithHomedir(
+  home: string,
+  options?: {
+    authOverrides?: Record<string, unknown>
+  }
+) {
   vi.resetModules()
   vi.doMock('node:os', async () => {
     const actual = await vi.importActual<typeof import('node:os')>('node:os')
@@ -15,7 +20,26 @@ async function loadScanWithHomedir(home: string) {
     }
   })
 
+  if (options?.authOverrides) {
+    vi.doMock('../auth', async () => {
+      const actual = await vi.importActual<typeof import('../auth')>('../auth')
+      return {
+        ...actual,
+        ...options.authOverrides,
+      }
+    })
+  } else {
+    vi.doUnmock('../auth')
+  }
+
   return import('../scan')
+}
+
+function setIsTTY(stream: NodeJS.ReadStream | NodeJS.WriteStream, value: boolean | undefined): void {
+  Object.defineProperty(stream, 'isTTY', {
+    configurable: true,
+    value,
+  })
 }
 
 describe('scan', () => {
@@ -231,6 +255,107 @@ describe('scan', () => {
     } finally {
       process.env.OPENAI_API_KEY = original
       logSpy.mockRestore()
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('--ai prompts for API key when interactive and key is missing', async () => {
+    const home = mkdtempSync(join(tmpdir(), 'sapper-ai-scan-ai-prompt-home-'))
+    const dir = mkdtempSync(join(tmpdir(), 'sapper-ai-scan-ai-prompt-dir-'))
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+    const promptAndSaveOpenAiApiKey = vi.fn(async () => 'sk-test-from-prompt')
+    const loadOpenAiApiKey = vi.fn(async () => null)
+
+    const originalKey = process.env.OPENAI_API_KEY
+    const originalStdoutIsTTY = process.stdout.isTTY
+    const originalStdinIsTTY = process.stdin.isTTY
+    delete process.env.OPENAI_API_KEY
+    setIsTTY(process.stdout, true)
+    setIsTTY(process.stdin, true)
+
+    try {
+      const { runScan } = await loadScanWithHomedir(home, {
+        authOverrides: {
+          loadOpenAiApiKey,
+          promptAndSaveOpenAiApiKey,
+        },
+      })
+      writeFileSync(join(dir, 'skill.md'), 'hello world', 'utf8')
+
+      const code = await runScan({ targets: [dir], ai: true, noSave: true, noOpen: true })
+
+      expect(code).toBe(0)
+      expect(loadOpenAiApiKey).toHaveBeenCalledTimes(1)
+      expect(promptAndSaveOpenAiApiKey).toHaveBeenCalledTimes(1)
+    } finally {
+      process.env.OPENAI_API_KEY = originalKey
+      setIsTTY(process.stdout, originalStdoutIsTTY)
+      setIsTTY(process.stdin, originalStdinIsTTY)
+      logSpy.mockRestore()
+      rmSync(home, { recursive: true, force: true })
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('--ai without key reports stdin_not_tty when stdin is not interactive', async () => {
+    const home = mkdtempSync(join(tmpdir(), 'sapper-ai-scan-ai-stdin-home-'))
+    const dir = mkdtempSync(join(tmpdir(), 'sapper-ai-scan-ai-stdin-dir-'))
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+
+    const originalKey = process.env.OPENAI_API_KEY
+    const originalStdoutIsTTY = process.stdout.isTTY
+    const originalStdinIsTTY = process.stdin.isTTY
+    delete process.env.OPENAI_API_KEY
+    setIsTTY(process.stdout, true)
+    setIsTTY(process.stdin, false)
+
+    try {
+      const { runScan } = await loadScanWithHomedir(home)
+      writeFileSync(join(dir, 'skill.md'), 'hello world', 'utf8')
+
+      const code = await runScan({ targets: [dir], ai: true, noSave: true, noOpen: true })
+      const output = logSpy.mock.calls.map((c) => String(c[0])).join('\n')
+
+      expect(code).toBe(1)
+      expect(output).toContain('OPENAI_API_KEY environment variable is required for --ai mode.')
+      expect(output).toContain('stdin_not_tty')
+    } finally {
+      process.env.OPENAI_API_KEY = originalKey
+      setIsTTY(process.stdout, originalStdoutIsTTY)
+      setIsTTY(process.stdin, originalStdinIsTTY)
+      logSpy.mockRestore()
+      rmSync(home, { recursive: true, force: true })
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('--ai with --no-prompt reports no_prompt_flag when key is missing', async () => {
+    const home = mkdtempSync(join(tmpdir(), 'sapper-ai-scan-ai-no-prompt-home-'))
+    const dir = mkdtempSync(join(tmpdir(), 'sapper-ai-scan-ai-no-prompt-dir-'))
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+
+    const originalKey = process.env.OPENAI_API_KEY
+    const originalStdoutIsTTY = process.stdout.isTTY
+    const originalStdinIsTTY = process.stdin.isTTY
+    delete process.env.OPENAI_API_KEY
+    setIsTTY(process.stdout, true)
+    setIsTTY(process.stdin, true)
+
+    try {
+      const { runScan } = await loadScanWithHomedir(home)
+      writeFileSync(join(dir, 'skill.md'), 'hello world', 'utf8')
+
+      const code = await runScan({ targets: [dir], ai: true, noPrompt: true, noSave: true, noOpen: true })
+      const output = logSpy.mock.calls.map((c) => String(c[0])).join('\n')
+
+      expect(code).toBe(1)
+      expect(output).toContain('no_prompt_flag')
+    } finally {
+      process.env.OPENAI_API_KEY = originalKey
+      setIsTTY(process.stdout, originalStdoutIsTTY)
+      setIsTTY(process.stdin, originalStdinIsTTY)
+      logSpy.mockRestore()
+      rmSync(home, { recursive: true, force: true })
       rmSync(dir, { recursive: true, force: true })
     }
   })

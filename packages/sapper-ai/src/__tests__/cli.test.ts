@@ -26,6 +26,8 @@ async function loadCliWithAnswers(
       getStatus?: () => unknown
     }
     guardLoader?: (modulePath: string) => Promise<Record<string, unknown>>
+    runScanMock?: (options?: unknown) => Promise<number>
+    selectMock?: (options?: unknown) => Promise<unknown>
   }
 ) {
   vi.resetModules()
@@ -74,12 +76,39 @@ async function loadCliWithAnswers(
     vi.doUnmock('../guard/setup')
   }
 
+  if (options?.runScanMock) {
+    vi.doMock('../scan', async () => {
+      const actual = await vi.importActual<typeof import('../scan')>('../scan')
+      return {
+        ...actual,
+        runScan: options.runScanMock,
+      }
+    })
+  } else {
+    vi.doUnmock('../scan')
+  }
+
+  if (options?.selectMock) {
+    vi.doMock('@inquirer/select', () => ({
+      default: options.selectMock,
+    }))
+  } else {
+    vi.doUnmock('@inquirer/select')
+  }
+
   const module = await import('../cli')
   if (options?.guardLoader) {
     module.__setGuardModuleLoaderForTests(options.guardLoader)
   }
 
   return module
+}
+
+function setIsTTY(stream: NodeJS.ReadStream | NodeJS.WriteStream, value: boolean | undefined): void {
+  Object.defineProperty(stream, 'isTTY', {
+    configurable: true,
+    value,
+  })
 }
 
 describe('sapper-ai cli', () => {
@@ -357,6 +386,79 @@ describe('sapper-ai cli guard command', () => {
       expect(list).toHaveBeenCalledTimes(1)
       expect(clear).toHaveBeenCalledTimes(1)
     } finally {
+      logSpy.mockRestore()
+    }
+  })
+})
+
+describe('sapper-ai cli scan prompt behavior', () => {
+  it('does not open interactive scan prompts when stdin is not TTY', async () => {
+    const runScanMock = vi.fn(async () => 0)
+    const selectMock = vi.fn(async () => 'deep')
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+    const originalStdoutIsTTY = process.stdout.isTTY
+    const originalStdinIsTTY = process.stdin.isTTY
+
+    setIsTTY(process.stdout, true)
+    setIsTTY(process.stdin, false)
+
+    try {
+      const { runCli } = await loadCliWithAnswers([], { runScanMock, selectMock })
+      const code = await runCli(['scan'])
+
+      expect(code).toBe(0)
+      expect(selectMock).not.toHaveBeenCalled()
+      expect(runScanMock).toHaveBeenCalledTimes(1)
+      expect(runScanMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          targets: [process.cwd()],
+          deep: true,
+          ai: false,
+        })
+      )
+    } finally {
+      setIsTTY(process.stdout, originalStdoutIsTTY)
+      setIsTTY(process.stdin, originalStdinIsTTY)
+      logSpy.mockRestore()
+    }
+  })
+
+  it('opens interactive scan prompts when stdin and stdout are TTY', async () => {
+    const runScanMock = vi.fn(async () => 0)
+    const selectMock = vi.fn(async () => 'shallow')
+    selectMock.mockResolvedValueOnce('shallow')
+    selectMock.mockResolvedValueOnce(true)
+
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+    const originalStdoutIsTTY = process.stdout.isTTY
+    const originalStdinIsTTY = process.stdin.isTTY
+    const originalCi = process.env.CI
+
+    setIsTTY(process.stdout, true)
+    setIsTTY(process.stdin, true)
+    process.env.CI = 'true'
+
+    try {
+      const { runCli } = await loadCliWithAnswers([], { runScanMock, selectMock })
+      const code = await runCli(['scan'])
+
+      expect(code).toBe(0)
+      expect(selectMock).toHaveBeenCalledTimes(2)
+      expect(runScanMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          targets: [process.cwd()],
+          deep: false,
+          ai: true,
+        })
+      )
+    } finally {
+      if (originalCi === undefined) {
+        delete process.env.CI
+      } else {
+        process.env.CI = originalCi
+      }
+      setIsTTY(process.stdout, originalStdoutIsTTY)
+      setIsTTY(process.stdin, originalStdinIsTTY)
       logSpy.mockRestore()
     }
   })
