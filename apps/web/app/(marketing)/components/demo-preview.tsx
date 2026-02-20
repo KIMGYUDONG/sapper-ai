@@ -17,7 +17,7 @@ export function DemoPreview() {
 
       <div className="mt-5 overflow-hidden rounded-lg border border-border">
         <div className="flex items-center gap-3 border-b border-border bg-surface px-4 py-2">
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1.5" aria-hidden="true">
             <span className="h-2.5 w-2.5 rounded-full bg-steel/30" />
             <span className="h-2.5 w-2.5 rounded-full bg-steel/30" />
             <span className="h-2.5 w-2.5 rounded-full bg-steel/30" />

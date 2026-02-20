@@ -29,7 +29,7 @@ export function QuickstartPreview() {
 
       <div className="mt-5 overflow-hidden rounded-lg border border-border">
         <div className="flex items-center gap-3 border-b border-border bg-surface px-4 py-2">
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1.5" aria-hidden="true">
             <span className="h-2.5 w-2.5 rounded-full bg-steel/30" />
             <span className="h-2.5 w-2.5 rounded-full bg-steel/30" />
             <span className="h-2.5 w-2.5 rounded-full bg-steel/30" />
@@ -54,6 +54,7 @@ $ npx sapper-ai scan`}</pre>
           href="https://github.com/sapper-ai/sapperai"
           target="_blank"
           rel="noopener noreferrer"
+          aria-label="View repository (opens in a new tab)"
           className="inline-flex items-center justify-center rounded-lg border border-border bg-surface px-4 py-2 text-xs font-semibold text-ink transition hover:bg-muted"
         >
           View repo
