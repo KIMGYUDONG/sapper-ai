@@ -92,19 +92,20 @@ export function CampaignSection() {
       />
 
       <div className="grid gap-5 lg:grid-cols-[0.9fr_1.1fr]">
-        <div className="grid gap-4">
+        <div className="grid content-start gap-4">
           <button
             type="button"
-            className="inline-flex items-center justify-center gap-2 rounded-lg bg-ink px-4 py-3 text-sm font-semibold text-white transition hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex items-center justify-center gap-2 rounded-lg bg-olive-700 dark:bg-olive-400 px-4 py-3 text-sm font-semibold text-white dark:text-gray-900 transition hover:bg-olive-800 dark:hover:bg-olive-300 disabled:cursor-not-allowed disabled:opacity-50"
             onClick={() => void runCampaign({ useDefaultPolicy: false })}
             disabled={campaignLoading}
+            aria-busy={campaignLoading}
           >
-            {campaignLoading && <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />}
+            <span className={`inline-block h-4 w-4 rounded-full border-2 border-white border-t-transparent ${campaignLoading ? 'animate-spin' : 'opacity-0'}`} aria-hidden="true" />
             {campaignLoading ? '캠페인 실행 중...' : '원클릭 캠페인 실행'}
           </button>
 
           {campaignError && (
-            <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-600">
+            <div role="alert" className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-600 dark:border-red-800 dark:bg-red-950 dark:text-red-400">
               <p className="font-semibold">캠페인 실행 오류</p>
               <p className="mt-1 whitespace-pre-wrap">{campaignError}</p>
             </div>
@@ -122,7 +123,7 @@ export function CampaignSection() {
                         <span className="rounded-full border border-border bg-muted px-3 py-1 text-[11px] font-medium text-steel">
                           Total {campaignResult.totalCases}
                         </span>
-                        <span className="rounded-full border border-red-200 bg-red-50 px-3 py-1 text-[11px] font-medium text-red-600">
+                        <span className="rounded-full border border-red-200 bg-red-50 px-3 py-1 text-[11px] font-medium text-red-600 dark:border-red-800 dark:bg-red-950 dark:text-red-400">
                           Blocked {campaignResult.blockedCases}
                         </span>
                         <span className="rounded-full border border-border bg-muted px-3 py-1 text-[11px] font-medium text-steel">
@@ -174,7 +175,7 @@ export function CampaignSection() {
                         </span>
                       </div>
                       <div className="flex items-center gap-3">
-                        <div className="h-2.5 w-full overflow-hidden rounded-full bg-gray-100">
+                        <div className="h-2.5 w-full overflow-hidden rounded-full bg-gray-100 dark:bg-gray-800">
                           <div className="h-2.5 rounded-full bg-signal transition-all" style={{ width: `${ratio * 100}%` }} />
                         </div>
                         <span className="w-14 text-right text-[11px] font-medium tabular-nums text-steel">
@@ -199,7 +200,7 @@ export function CampaignSection() {
                         </span>
                       </div>
                       <div className="flex items-center gap-3">
-                        <div className="h-2.5 w-full overflow-hidden rounded-full bg-gray-100">
+                        <div className="h-2.5 w-full overflow-hidden rounded-full bg-gray-100 dark:bg-gray-800">
                           <div className="h-2.5 rounded-full bg-ember transition-all" style={{ width: `${ratio * 100}%` }} />
                         </div>
                         <span className="w-14 text-right text-[11px] font-medium tabular-nums text-steel">
@@ -230,51 +231,54 @@ export function CampaignSection() {
 
                 <div className="max-h-80 overflow-auto rounded-xl border border-border bg-surface">
                   <div className="min-w-[860px]">
-                    <div className="sticky top-0 z-10 grid grid-cols-[minmax(260px,1.2fr)_160px_120px_110px_1fr] gap-3 border-b border-border bg-muted px-4 py-2 text-[10px] font-semibold uppercase tracking-wider text-steel">
-                      <div>Label</div>
-                      <div>Type</div>
-                      <div>Severity</div>
-                      <div>Action</div>
-                      <div>Risk</div>
-                    </div>
+                    <table className="w-full">
+                      <thead className="sticky top-0 z-10 border-b border-border bg-muted text-[10px] font-semibold uppercase tracking-wider text-steel">
+                        <tr className="grid grid-cols-[minmax(260px,1.2fr)_160px_120px_110px_1fr] gap-3 px-4 py-2">
+                          <th className="text-left font-semibold">Label</th>
+                          <th className="text-left font-semibold">Type</th>
+                          <th className="text-left font-semibold">Severity</th>
+                          <th className="text-left font-semibold">Action</th>
+                          <th className="text-left font-semibold">Risk</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border">
+                        {campaignResult.cases.map((entry) => {
+                          const riskValue = clampRisk(entry.decision.risk)
+                          const severityVariant =
+                            entry.severity === 'critical' || entry.severity === 'high'
+                              ? 'critical'
+                              : entry.severity === 'medium'
+                                ? 'warning'
+                                : 'clear'
 
-                    <ul className="divide-y divide-border">
-                      {campaignResult.cases.map((entry) => {
-                        const riskValue = clampRisk(entry.decision.risk)
-                        const severityVariant =
-                          entry.severity === 'critical' || entry.severity === 'high'
-                            ? 'critical'
-                            : entry.severity === 'medium'
-                              ? 'warning'
-                              : 'clear'
-
-                        return (
-                          <li
-                            key={entry.id}
-                            className="grid grid-cols-[minmax(260px,1.2fr)_160px_120px_110px_1fr] gap-3 px-4 py-3 text-xs transition hover:bg-muted/50"
-                          >
-                            <div className="grid gap-1">
-                              <p className="font-medium text-ink">{entry.label}</p>
-                              <p className="text-[11px] text-steel">{entry.decision.reasons[0] ?? '탐지 사유 없음'}</p>
-                            </div>
-                            <div className="flex items-center text-steel">{typeLabels[entry.type] ?? entry.type}</div>
-                            <div className="flex items-center">
-                              <StatusBadge variant={severityVariant} label={severityLabels[entry.severity] ?? entry.severity} />
-                            </div>
-                            <div className="flex items-center">
-                              <StatusBadge variant={entry.decision.action === 'block' ? 'block' : 'allow'} />
-                            </div>
-                            <div className="grid gap-1">
-                              <div className="flex items-center justify-between text-[11px] text-steel">
-                                <span className="font-medium tabular-nums">{formatPercent(riskValue)}</span>
-                                <span className="tabular-nums">conf {formatPercent(entry.decision.confidence)}</span>
-                              </div>
-                              <RiskBar value={riskValue} height="sm" />
-                            </div>
-                          </li>
-                        )
-                      })}
-                    </ul>
+                          return (
+                            <tr
+                              key={entry.id}
+                              className="grid grid-cols-[minmax(260px,1.2fr)_160px_120px_110px_1fr] gap-3 px-4 py-3 text-xs transition hover:bg-muted/50"
+                            >
+                              <td className="grid gap-1">
+                                <p className="font-medium text-ink">{entry.label}</p>
+                                <p className="text-[11px] text-steel">{entry.decision.reasons[0] ?? '탐지 사유 없음'}</p>
+                              </td>
+                              <td className="flex items-center text-steel">{typeLabels[entry.type] ?? entry.type}</td>
+                              <td className="flex items-center">
+                                <StatusBadge variant={severityVariant} label={severityLabels[entry.severity] ?? entry.severity} />
+                              </td>
+                              <td className="flex items-center">
+                                <StatusBadge variant={entry.decision.action === 'block' ? 'block' : 'allow'} />
+                              </td>
+                              <td className="grid gap-1">
+                                <div className="flex items-center justify-between text-[11px] text-steel">
+                                  <span className="font-medium tabular-nums">{formatPercent(riskValue)}</span>
+                                  <span className="tabular-nums">conf {formatPercent(entry.decision.confidence)}</span>
+                                </div>
+                                <RiskBar value={riskValue} height="sm" />
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
                   </div>
                 </div>
               </div>

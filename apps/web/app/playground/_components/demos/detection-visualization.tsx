@@ -95,21 +95,13 @@ export function DetectionVisualization({ data }: { data: DetectionResponse }) {
 
       <div className="grid gap-2">
         <p className="text-sm font-semibold text-ink">Timeline</p>
-        <ol className="relative grid gap-2 pl-8 before:absolute before:bottom-2 before:left-3 before:top-2 before:w-px before:bg-border">
-          {timeline.map((entry, index) => {
-            const isTerminal = index === timeline.length - 1
-            return (
-              <li key={entry.id} className="relative rounded-lg border border-border bg-surface px-3 py-2">
-                <span
-                  className={`absolute left-3 top-4 h-2.5 w-2.5 -translate-x-1/2 rounded-full border-2 ${
-                    isTerminal ? 'border-ember bg-ember' : 'border-gray-300 bg-surface'
-                  }`}
-                />
-                <p className="text-xs font-semibold uppercase tracking-wide text-steel">{entry.title}</p>
-                <p className="mt-1 text-xs text-steel">{entry.detail}</p>
-              </li>
-            )
-          })}
+        <ol className="grid gap-2">
+          {timeline.map((entry) => (
+            <li key={entry.id} className="rounded-lg border border-border bg-surface px-3 py-2">
+              <p className="text-xs font-semibold uppercase tracking-wide text-steel">{entry.title}</p>
+              <p className="mt-1 text-xs text-steel">{entry.detail}</p>
+            </li>
+          ))}
         </ol>
       </div>
     </div>

@@ -16,7 +16,7 @@ export function RiskBar({
 
   return (
     <div className="grid gap-1">
-      <div className={`${heightClass} w-full overflow-hidden rounded-full bg-gray-100`}>
+      <div className={`${heightClass} w-full overflow-hidden rounded-full bg-gray-100 dark:bg-gray-800`}>
         <div
           className={`${heightClass} rounded-full transition-all duration-500 ${getRiskTone(clamped)}`}
           style={{ width: `${clamped * 100}%` }}

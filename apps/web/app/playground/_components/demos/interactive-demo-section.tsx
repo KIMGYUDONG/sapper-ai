@@ -170,7 +170,7 @@ export function InteractiveDemoSection() {
       />
 
       {sampleNotice && (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900">
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-400">
           <p className="font-semibold">지원하지 않는 sample 값이 들어왔습니다.</p>
           <p className="mt-1">
             sample=<span className="font-mono">{sampleNotice.invalid}</span> → fallback=
@@ -187,19 +187,25 @@ export function InteractiveDemoSection() {
               key={preset.id}
               type="button"
               className={`rounded-xl border px-4 py-3 text-left transition ${
-                isActive ? 'border-ink bg-ink text-white' : 'border-border bg-surface text-ink hover:bg-muted'
+                isActive
+                  ? 'border-olive-700 bg-olive-700 text-white dark:border-olive-400 dark:bg-olive-400 dark:text-gray-900'
+                  : 'border-border bg-surface text-ink hover:bg-muted'
               }`}
               onClick={() => handlePresetChange(preset)}
             >
-              <p className={`text-sm font-semibold ${isActive ? 'text-white' : 'text-ink'}`}>{preset.title}</p>
-              <p className={`mt-1 text-xs ${isActive ? 'text-gray-300' : 'text-steel'}`}>{preset.summary}</p>
+              <p className={`text-sm font-semibold ${isActive ? 'text-white dark:text-gray-900' : 'text-ink'}`}>
+                {preset.title}
+              </p>
+              <p className={`mt-1 text-xs ${isActive ? 'text-olive-200 dark:text-olive-800' : 'text-steel'}`}>
+                {preset.summary}
+              </p>
             </button>
           )
         })}
       </div>
 
       <div className="grid gap-5 lg:grid-cols-[1fr_1.1fr]">
-        <div className="grid gap-4">
+        <div className="grid content-start gap-4">
           <label className="grid gap-2 text-sm font-medium text-steel">
             Tool 이름
             <input
@@ -218,11 +224,12 @@ export function InteractiveDemoSection() {
           </label>
           <button
             type="button"
-            className="inline-flex items-center justify-center gap-2 rounded-lg bg-ink px-4 py-3 text-sm font-semibold text-white transition hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex items-center justify-center gap-2 rounded-lg bg-olive-700 dark:bg-olive-400 px-4 py-3 text-sm font-semibold text-white dark:text-gray-900 transition hover:bg-olive-800 dark:hover:bg-olive-300 disabled:cursor-not-allowed disabled:opacity-50"
             onClick={() => void runDetection({ toolName, payloadText })}
             disabled={loading}
+            aria-busy={loading}
           >
-            {loading && <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />}
+            <span className={`inline-block h-4 w-4 rounded-full border-2 border-white border-t-transparent ${loading ? 'animate-spin' : 'opacity-0'}`} aria-hidden="true" />
             {loading ? '탐지 엔진 실행 중...' : 'SapperAI 탐지 실행'}
           </button>
           <p className="text-xs text-steel">
@@ -240,7 +247,7 @@ export function InteractiveDemoSection() {
           )}
 
           {error && (
-            <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-600">
+            <div role="alert" className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-600 dark:border-red-800 dark:bg-red-950 dark:text-red-400">
               <p className="font-semibold">오류가 발생했습니다.</p>
               <p className="mt-1 whitespace-pre-wrap">{error}</p>
             </div>

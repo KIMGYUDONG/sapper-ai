@@ -21,9 +21,9 @@ export function CircularGauge({ value, label }: { value: number; label?: string 
   }, [clamped])
 
   return (
-    <div className="relative h-24 w-24">
+    <div className="relative h-24 w-24 shrink-0">
       <svg viewBox="0 0 100 100" className="h-full w-full">
-        <circle r="45" cx="50" cy="50" fill="none" strokeWidth="8" className="stroke-gray-100" />
+        <circle r="45" cx="50" cy="50" fill="none" strokeWidth="8" className="stroke-gray-100 dark:stroke-gray-700" />
         <circle
           r="45"
           cx="50"

@@ -74,9 +74,10 @@ export default function PlaygroundConfigPage() {
               onClick={() => void load()}
               className="inline-flex items-center justify-center gap-2 rounded-lg border border-border bg-surface px-4 py-2 text-sm font-semibold text-ink transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
               disabled={loading}
+              aria-busy={loading}
             >
               {loading && (
-                <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-steel border-t-transparent" />
+                <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-steel border-t-transparent" aria-hidden="true" />
               )}
               Refresh
             </button>
@@ -85,7 +86,7 @@ export default function PlaygroundConfigPage() {
       </section>
 
       {error && (
-        <div className="rounded-2xl border border-red-200 bg-red-50 p-5 text-sm text-red-700">
+        <div role="alert" className="rounded-2xl border border-red-200 bg-red-50 p-5 text-sm text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-400">
           {error}
         </div>
       )}

@@ -91,7 +91,7 @@ export function UploadSection() {
           )}
           {uploading && (
             <div className="flex items-center gap-2 text-sm text-signal">
-              <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-signal border-t-transparent" />
+              <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-signal border-t-transparent" aria-hidden="true" />
               파일 분석 중...
             </div>
           )}
@@ -106,7 +106,7 @@ export function UploadSection() {
           )}
 
           {uploadError && (
-            <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-600">
+            <div role="alert" className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-600 dark:border-red-800 dark:bg-red-950 dark:text-red-400">
               <p className="font-semibold">업로드 분석 오류</p>
               <p className="mt-1 whitespace-pre-wrap">{uploadError}</p>
             </div>
